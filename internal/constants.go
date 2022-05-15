@@ -1,12 +1,11 @@
 package ste
 
 const (
-    CTRL_Q = iota
-    
-    ARROW_UP = iota
-    ARROW_DOWN = iota
-    ARROW_RIGHT = iota
-    ARROW_LEFT = iota
+    TABWIDTH = 8
+)
 
-    ENTER = iota
+type Mode int64
+const (
+    EditMode Mode = iota
+    HelpMode
 )

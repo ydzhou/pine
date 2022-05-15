@@ -1,5 +1,9 @@
 module github.com/ydzhou/ste
 
-go 1.15
+go 1.18
 
-require github.com/google/goterm v0.0.0-20200907032337-555d40f16ae2
+require (
+	github.com/mattn/go-runewidth v0.0.13 // indirect
+	github.com/nsf/termbox-go v1.1.1 // direct
+	github.com/rivo/uniseg v0.2.0 // indirect
+)

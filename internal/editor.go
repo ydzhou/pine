@@ -1,93 +1,107 @@
 package ste
 
 import (
-    "os"
-    "bufio"
-    "github.com/ydzhou/ste/internal/term"
+	"os"
+
+	"github.com/mattn/go-runewidth"
+	tm "github.com/nsf/termbox-go"
 )
 
 type Editor struct {
-    term term.Term
     buf Buffer
-    reader *bufio.Reader
     render Render
-    cursorX, cursorY int
-    rowOffset, colOffset int
+    cursor *Pos
+    mode Mode
+}
+
+type Pos struct {
+    x, y int
 }
 
 func (e *Editor) Init() {
-    e.term = term.Term{}
-    e.buf = Buffer{}
-    e.reader = bufio.NewReader(os.Stdin)
-    e.render = Render{}
-    e.cursorX = 0
-    e.cursorY = 0
+    e.cursor = &Pos{0, 0}
+    e.buf = Buffer{
+        cursor: e.cursor,
+    }
     e.buf.New()
+    e.render = Render{
+        buf: &e.buf,
+        cursor: e.cursor,
+        viewCursor: &Pos{0, 0},
+        viewAnchor: &Pos{0, 0},
+    }
+    e.mode = EditMode
 }
 
 func (e *Editor) Start() {
-    _ = e.term.Raw()
-
-    e.render.Clear()
-
-    defer e.term.Reset()
-
+    err := tm.Init()
+        if err != nil {
+            panic(err)
+    }
+    defer tm.Close()
+    
     for {
-        e.render.DrawScreen(e.buf, e.cursorX, e.cursorY, e.rowOffset, e.colOffset)
+        e.render.DrawScreen(e.mode)
         if e.process() {
             break
         }
     }
 
     e.render.Clear()
+    tm.Flush()
 }
 
 func (e *Editor) process() bool {
-    keyAscii, key, special := e.readKeyPress()
-    if special {
-    switch keyAscii {
-    case CTRL_Q:
-        return true
-    case ARROW_UP, ARROW_DOWN, ARROW_RIGHT, ARROW_LEFT:
-        e.moveCursor(keyAscii)
-        break
-    case ENTER:
-        e.buf.NewLine(e.cursorX, e.cursorY)
-        e.cursorX ++
-        e.cursorY = 0
-        break
+    event := tm.PollEvent()
+    if event.Type != tm.EventKey {
+        return false
     }
-    } else {
-        e.buf.Insert(e.cursorX, e.cursorY, key)
-        e.cursorY ++
+    switch event.Key {
+    case tm.KeyCtrlX:
+        if e.mode == HelpMode {
+            e.mode = EditMode
+        } else {
+            tm.Flush()
+            return true
+        }
+    case tm.KeyCtrlSlash:
+        e.mode = HelpMode
+    case tm.KeyCtrlA:
+        e.cursor.y = 0
+    case tm.KeyCtrlE:
+        e.moveCursorToEOL()
+    case tm.KeyArrowUp, tm.KeyArrowDown, tm.KeyArrowLeft, tm.KeyArrowRight:
+        e.moveCursor(event.Key)
+        break
+    case tm.KeyEnter:
+        e.buf.NewLine(e.cursor)
+        break
+    case tm.KeyBackspace, tm.KeyBackspace2:
+        e.buf.Delete(e.cursor)
+        break
+    case tm.KeySpace:
+        e.buf.Insert(e.cursor, rune(' '))
+    case tm.KeyTab:
+        e.buf.InsertTab() 
+    default:
+        if runewidth.RuneWidth(event.Ch) > 0 {
+            e.buf.lastModifiedCh = "NA"
+            e.buf.Insert(e.cursor, event.Ch)
+        }
     }
+    e.render.SyncCursorToView()
     return false
 }
 
-func (e *Editor) moveCursor(keyType int) {
-    switch keyType {
-    case ARROW_UP:
-        if e.cursorX > 0 {
-            e.cursorX--
-        }
-    case ARROW_DOWN:
-        if e.cursorX < len(e.buf.lines) - 1 {
-            e.cursorX++
-        }
-    case ARROW_RIGHT:
-        if len(e.buf.lines) > 0 && e.cursorY < len(e.buf.lines[e.cursorX].txt) {
-            e.cursorY++
-        }
-    case ARROW_LEFT:
-        if e.cursorY > 0 {
-            e.cursorY--
-        }
-    }
-    // Reset cursor position if line does not have enough char
-    if e.cursorY > len(e.buf.lines[e.cursorX].txt) {
-        e.cursorY = len(e.buf.lines[e.cursorX].txt)
-    }
+func (e *Editor) moveCursor(keyType tm.Key) {
+    e.render.MoveCursor(keyType)
+}
 
+func (e *Editor) moveCursorToEOL() {
+    if len(e.buf.lines) == 0 {
+        e.cursor.y = 0
+    }
+    e.cursor.y = len(e.buf.lines[e.cursor.x].txt)
 }
 
 func (e *Editor) Open(fileName string) {

@@ -1,69 +1,191 @@
 package ste
 
 import (
-	"bytes"
-	"fmt"
-	"io"
-	"os"
+    "fmt"
+    tm "github.com/nsf/termbox-go"
+    "github.com/mattn/go-runewidth"
 )
 
 type Render struct {
-	viewX, viewY int
+	termH, termW int
+    viewMaxH, viewMaxW int
+    buf *Buffer
+    cursor *Pos
+    viewCursor *Pos
+    viewAnchor *Pos
 }
 
 func (r *Render) Clear() {
-	_, err := io.WriteString(os.Stdout, "\x1b[2J")
-	_, err = io.WriteString(os.Stdout, "\x1b[H")
-	if err != nil {
-	    panic(err)
+    tm.Clear(tm.ColorDefault, tm.ColorDefault)
+}
+
+func (r *Render) DrawScreen(mode Mode) {
+    r.Clear()
+
+    r.termW, r.termH = tm.Size()
+    r.viewMaxH = r.termH - 1
+    r.viewMaxW = r.termW
+
+    r.drawStatusline()
+
+    if mode == EditMode {
+	    r.drawBuffer()
+        r.drawCursor()
+    } else {
+        r.drawHelpPage()
+    }
+
+    tm.Flush()
+}
+
+func (r *Render) drawHelpPage() {
+    tbprint(2, 0, tm.ColorDefault, tm.ColorDefault, "Press ^X to return")
+    tbprint(3, 0, tm.ColorDefault, tm.ColorDefault, "^A: Go to start of the line")
+    tbprint(4, 0, tm.ColorDefault, tm.ColorDefault, "^E: Go to end of the line")
+
+}
+
+func (r *Render) drawStatusline() {
+    for i := 0; i < r.termW - 1; i ++ {
+        tm.SetCell(i, 0, rune(' '), tm.ColorBlack, tm.ColorWhite)
+    }
+    tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf(" c %d:%d | vc %d:%d | va%d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), len(r.buf.lines[r.cursor.x].txt)))
+}
+
+func (r *Render) drawBuffer() {
+    viewIndex := 1
+    for i, _ := range r.buf.lines {
+        if i < r.viewAnchor.x {
+            continue
+        }
+        viewIndex ++
+        r.drawBufferLine(i, viewIndex - 1)
     }
 }
 
-func (r *Render) DrawScreen(
-	buf Buffer,
-	cursorX int,
-	cursorY int,
-	rowOffset int,
-	colOffset int,
+func (r *Render) drawBufferLine(i int, viewIndex int) {
+    renderedData := ""
+    y := 0
+    for _, ch := range r.buf.lines[i].txt {
+        if ch == rune('\t') {
+            renderedData += r.drawTab(runeRenderedWidth(y, ch))
+        } else {
+            renderedData += string(ch)
+        }
+        y += runeRenderedWidth(y, ch)
+    }
+    if (y < r.viewAnchor.y) {
+        return
+    }
+    // TODO: it can print out of the screen. but termbox-go handles
+    // this misbehavior. need to clean up this mess.
+    tbprint(i - r.viewAnchor.x + 1, 0, tm.ColorDefault, tm.ColorDefault, renderedData[r.viewAnchor.y:])
+    if (len(renderedData[r.viewAnchor.y:]) >= r.termW) {
+        tbprint(i - r.viewAnchor.x + 1, r.termW - 1, tm.ColorCyan, tm.ColorDefault, ">")
+    }
+}
+
+func (r *Render) drawTab(tablength int) string {
+    tab := ""
+    for i := 0; i < tablength; i ++ {
+        tab += " "
+    }
+    return tab
+}
+
+func (r *Render) drawCursor() {
+    tm.SetCursor(r.viewCursor.y - r.viewAnchor.y, r.viewCursor.x - r.viewAnchor.x+ 1)
+}
+
+/*
+ * MoveCursor
+ * 
+ * Update cursor position and view based on cursor movement
+ * Cursor x,y are determined by view x,y
+ */
+func (r *Render) MoveCursor(
+    keyType tm.Key,
 ) {
-	b := bytes.Buffer{}
-	b.WriteString("\x1b[?25l")
-	b.WriteString("\x1b[H")
-	b.WriteString(r.drawBuffer(buf, rowOffset, colOffset))
-	b.WriteString(r.drawCursor(cursorX, cursorY, rowOffset, colOffset))
-	b.WriteString("\x1b[?25h")
-
-	_, err := b.WriteTo(os.Stdout)
-	if err != nil {
-	    panic(err)
+    if len(r.buf.lines) == 0 {
+        return
+    }
+    switch keyType {
+    case tm.KeyArrowUp: r.moveCursorUp()
+    case tm.KeyArrowDown: r.moveCursorDown()
+    case tm.KeyArrowLeft: r.moveCursorLeft()
+    case tm.KeyArrowRight: r.moveCursorRight()
     }
 }
 
-func (r *Render) drawBuffer(
-	buf Buffer,
-	rowOffset int,
-	colOffset int,
-) string {
-	res := ""
-	for i, row := range buf.lines {
-		if i < rowOffset {
-			continue
-		}
-		res += string(row.txt[colOffset:])
-		res += "\x1b[K"
-		res += "\r\n"
-	}
-	return res
+func (r *Render) moveCursorUp() {
+    if r.cursor.x == 0 {
+        return
+    }
+    r.cursor.x --
+    if r.cursor.y > len(r.buf.lines[r.cursor.x].txt) {
+        r.cursor.y = len(r.buf.lines[r.cursor.x].txt)
+    }
 }
 
-func (r *Render) drawCursor(
-	cursorX int,
-	cursorY int,
-	rowOffset int,
-	colOffset int,
-) string {
-	return fmt.Sprintf(
-		"\x1b[%d;%dH",
-		cursorX-rowOffset+1,
-		cursorY-colOffset+1)
+func (r *Render) moveCursorDown() {
+    if r.cursor.x == len(r.buf.lines) - 1 {
+        return
+    }
+    r.cursor.x ++
+    if r.cursor.y > len(r.buf.lines[r.cursor.x].txt) {
+        r.cursor.y = len(r.buf.lines[r.cursor.x].txt)
+    }
+}
+
+func (r *Render) moveCursorLeft() {
+    if r.cursor.y == 0 && r.viewAnchor.y > 0 {
+        panic("cursor and viewpoint out of sync")
+    }
+    if r.cursor.y == 0 {
+        return
+    }
+    r.cursor.y --
+}
+
+func (r *Render) moveCursorRight() {
+    if r.cursor.y == len(r.buf.lines[r.cursor.x].txt) {
+        return
+    }
+    r.cursor.y ++
+}
+
+func (r *Render) SyncCursorToView() {
+    r.viewCursor.x = r.cursor.x
+    r.viewCursor.y = 0
+    currLine := &r.buf.lines[r.cursor.x]
+    if len(r.buf.lines) > 0 && len(currLine.txt) > 0 {
+        for j :=0; j < r.cursor.y; j++ {
+            r.viewCursor.y += runeRenderedWidth(r.viewCursor.y, currLine.txt[j])
+        }
+    }
+
+    r.offsetView()
+}
+
+func (r *Render) offsetView() {
+    if r.viewAnchor.x > 0 && r.viewCursor.x < r.viewAnchor.x {
+        r.viewAnchor.x = r.viewCursor.x
+    }
+    if r.viewCursor.x > r.viewAnchor.x + r.viewMaxH - 1 {
+        r.viewAnchor.x = r.viewCursor.x - r.viewMaxH + 1
+    }
+    if r.viewAnchor.y > 0 && r.viewCursor.y < r.viewAnchor.y {
+        r.viewAnchor.y = r.viewCursor.y
+    }
+    if r.viewCursor.y > r.viewAnchor.y + r.viewMaxW - 1 {
+        r.viewAnchor.y = r.viewCursor.y - r.viewMaxW + 1
+    }
+}
+
+// y width, x height
+func tbprint(x, y int, fg, bg tm.Attribute, msg string) {
+	for _, c := range msg {
+		tm.SetCell(y, x, c, fg, bg)
+		y += runewidth.RuneWidth(c)
+	}
 }
