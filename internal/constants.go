@@ -8,4 +8,6 @@ type Mode int64
 const (
     EditMode Mode = iota
     HelpMode
+    FileMode
+    WelcomeMode
 )

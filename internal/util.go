@@ -16,3 +16,8 @@ func runeRenderedWidth(
     }
     return runewidth.RuneWidth(data)
 }
+
+func resetPos(p *Pos) {
+    p.x = 0
+    p.y = 0
+}

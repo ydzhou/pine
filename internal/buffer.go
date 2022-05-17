@@ -7,9 +7,7 @@ import (
 type Buffer struct {
     lines []line
     dirty bool
-    id int
     lastModifiedCh string
-    rowIndex, colIndex int
     cursor *Pos
 }
 
@@ -17,15 +15,18 @@ type line struct {
     txt [] rune
 }
 
-func (b *Buffer) New() {
+func (b *Buffer) New(cursor *Pos) {
+    b.cursor = cursor
     b.lines = []line{line{}}
+    b.lastModifiedCh = "NA"
+    b.dirty = true
 }
 
-func (b *Buffer) NewLine(cursor *Pos) {
+func (b *Buffer) NewLine() {
     b.lastModifiedCh = string("newline")
 
-    x := cursor.x
-    y := cursor.y
+    x := b.cursor.x
+    y := b.cursor.y
 
     if x > len(b.lines) - 1 || y > len(b.lines[x].txt) {
         panic(fmt.Errorf("failed to create new line at (%d,%d)", x, y))
@@ -44,16 +45,16 @@ func (b *Buffer) NewLine(cursor *Pos) {
     copy(b.lines[x+1:], b.lines[x:])
     b.lines[x] = line
 
-    cursor.x++
-    cursor.y = 0
+    b.cursor.x++
+    b.cursor.y = 0
 
     return
 }
 
-func (b *Buffer) Insert(cursor *Pos, data rune) {
-    x := cursor.x
-    y := cursor.y
-    cursor.y ++
+func (b *Buffer) Insert(data rune) {
+    x := b.cursor.x
+    y := b.cursor.y
+    b.cursor.y ++
     b.lastModifiedCh = fmt.Sprintf("+%s", string(data))
 
     // Append a new line if cursor is under the last line
@@ -75,12 +76,12 @@ func (b *Buffer) Insert(cursor *Pos, data rune) {
 }
 
 func (b *Buffer) InsertTab() {
-    b.Insert(b.cursor, rune('\t'))
+    b.Insert(rune('\t'))
 }
 
-func (b *Buffer) Delete(cursor *Pos) {
-    x := cursor.x
-    y := cursor.y
+func (b *Buffer) Delete() {
+    x := b.cursor.x
+    y := b.cursor.y
     if x == 0 && y == 0 {
         b.lastModifiedCh = string("NA")
         return
@@ -88,16 +89,16 @@ func (b *Buffer) Delete(cursor *Pos) {
     // Remove newline
     if y == 0 {
         b.lastModifiedCh = string("- newline")
-        cursor.y = len(b.lines[x - 1].txt)
+        b.cursor.y = len(b.lines[x - 1].txt)
         b.lines[x - 1].txt = append(b.lines[x - 1].txt, b.lines[x].txt...)
         b.removeLine(x)
-        cursor.x = cursor.x - 1
+        b.cursor.x = b.cursor.x - 1
         b.lastModifiedCh = "-newline"
         return
     }
     b.lastModifiedCh = fmt.Sprintf("-%s", string(b.lines[x].txt[y-1]))
-    cursor.y --
-    b.removeRune(cursor)
+    b.cursor.y --
+    b.removeRune(b.cursor)
 }
 
 func (b *Buffer) removeLine(x int) {

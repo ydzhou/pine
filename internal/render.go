@@ -15,41 +15,87 @@ type Render struct {
     viewAnchor *Pos
 }
 
+func (r *Render) Init(b *Buffer, c *Pos) {
+    r.buf = b
+    r.cursor = c
+    r.viewCursor = &Pos{0, 0}
+    r.viewAnchor = &Pos{0, 0}
+}
+
 func (r *Render) Clear() {
     tm.Clear(tm.ColorDefault, tm.ColorDefault)
 }
 
-func (r *Render) DrawScreen(mode Mode) {
+func (r *Render) DrawScreen(mode Mode, msg string) {
     r.Clear()
+    defer tm.Flush()
 
     r.termW, r.termH = tm.Size()
     r.viewMaxH = r.termH - 1
     r.viewMaxW = r.termW
 
-    r.drawStatusline()
+    r.drawStatusline(mode)
 
-    if mode == EditMode {
-	    r.drawBuffer()
-        r.drawCursor()
-    } else {
+    if mode == HelpMode {
         r.drawHelpPage()
+        tm.HideCursor()
+        return
+    } 
+
+    if mode == WelcomeMode {
+        r.drawWelcomePage()
+        tm.HideCursor()
+        return
     }
 
-    tm.Flush()
+    if r.buf == nil {
+        panic("buffer is null while in edit/file mode")
+    }
+
+	r.drawBuffer()
+    r.drawCursor()
+
+    if len(msg) > 0 {
+        r.drawMessage(msg)
+    }
+}
+
+func (r *Render) drawMessage(msg string) {
+    tbprint(r.termH - 1, 0, tm.ColorRed, tm.ColorDefault, msg)
+}
+
+func (r *Render) drawWelcomePage() {
+    tbprint(2, 0, tm.ColorDefault, tm.ColorDefault, "Press any key to start editing a new file")
 }
 
 func (r *Render) drawHelpPage() {
-    tbprint(2, 0, tm.ColorDefault, tm.ColorDefault, "Press ^X to return")
-    tbprint(3, 0, tm.ColorDefault, tm.ColorDefault, "^A: Go to start of the line")
-    tbprint(4, 0, tm.ColorDefault, tm.ColorDefault, "^E: Go to end of the line")
-
+    tbprint(2, 0, tm.ColorDefault, tm.ColorDefault, "Files")
+    tbprint(3, 0, tm.ColorDefault, tm.ColorDefault, "^R: open a file")
+    tbprint(4, 0, tm.ColorDefault, tm.ColorDefault, "^O: save a file")
+    tbprint(5, 0, tm.ColorDefault, tm.ColorDefault, "Navigation")
+    tbprint(6, 0, tm.ColorDefault, tm.ColorDefault, "^A: go to start of the line")
+    tbprint(7, 0, tm.ColorDefault, tm.ColorDefault, "^E: go to end of the line")
+    tbprint(8, 0, tm.ColorDefault, tm.ColorDefault, "^V: go to next screen")
+    tbprint(9, 0, tm.ColorDefault, tm.ColorDefault, "^Z: go to previous screen")
 }
 
-func (r *Render) drawStatusline() {
+func (r *Render) drawStatusline(mode Mode) {
     for i := 0; i < r.termW - 1; i ++ {
         tm.SetCell(i, 0, rune(' '), tm.ColorBlack, tm.ColorWhite)
     }
-    tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf(" c %d:%d | vc %d:%d | va%d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), len(r.buf.lines[r.cursor.x].txt)))
+    if mode == HelpMode {
+        tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, " HELP PAGE | Press ^X to return")
+        return
+    }
+    if mode == FileMode {
+        tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, " INPUT A FILE NAME | Press Enter to open")
+        return
+    }
+    currLineLen := 0
+    if len(r.buf.lines) > 0 {
+        currLineLen = len(r.buf.lines[r.cursor.x].txt)
+    }
+    tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf(" c %d:%d | vc %d:%d | va%d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), currLineLen))
 }
 
 func (r *Render) drawBuffer() {
@@ -188,4 +234,30 @@ func tbprint(x, y int, fg, bg tm.Attribute, msg string) {
 		tm.SetCell(y, x, c, fg, bg)
 		y += runewidth.RuneWidth(c)
 	}
+}
+
+func (r *Render) printInfo(msg string) {
+    tbprint(0, r.termH - 1, tm.ColorRed, tm.ColorDefault, msg)
+}
+
+func (r *Render) moveCursorToNextHalfScreen() {
+    if r.cursor.x + r.termH / 2 >= len(r.buf.lines) {
+        r.cursor.x = len(r.buf.lines) - 1
+    } else {
+        r.cursor.x += r.termH / 2
+    }
+    if r.cursor.y > len(r.buf.lines[r.cursor.x].txt) {
+        r.cursor.y = len(r.buf.lines[r.cursor.x].txt)
+    }
+}
+
+func (r *Render) moveCursorToPrevHalfScreen() {
+    if r.cursor.x - r.termH / 2 < 0 {
+        r.cursor.x = 0
+    } else {
+        r.cursor.x -= r.termH / 2
+    }
+    if r.cursor.y > len(r.buf.lines[r.cursor.x].txt) {
+        r.cursor.y = len(r.buf.lines[r.cursor.x].txt)
+    }
 }
