@@ -1,6 +1,9 @@
 package ste
 
 import (
+    "os"
+    "path/filepath"
+    "strings"
     "github.com/mattn/go-runewidth"
 )
 
@@ -20,4 +23,19 @@ func runeRenderedWidth(
 func resetPos(p *Pos) {
     p.x = 0
     p.y = 0
+}
+
+func expandHomeDir(path string) (string ,error) {
+    homeDir, err := os.UserHomeDir()
+    fullPath := path
+    if path == "~" {
+        fullPath = homeDir
+    } else if strings.HasPrefix(path, "~/") {
+        fullPath = filepath.Join(homeDir, path[2:])
+    }
+    if err != nil {
+        return "", err
+    }
+
+    return fullPath, nil
 }

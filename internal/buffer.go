@@ -1,7 +1,9 @@
 package ste
 
 import (
-    "fmt"
+	"bufio"
+	"fmt"
+	"os"
 )
 
 type Buffer struct {
@@ -9,6 +11,7 @@ type Buffer struct {
     dirty bool
     lastModifiedCh string
     cursor *Pos
+    filePath string
 }
 
 type line struct {
@@ -19,7 +22,7 @@ func (b *Buffer) New(cursor *Pos) {
     b.cursor = cursor
     b.lines = []line{line{}}
     b.lastModifiedCh = "NA"
-    b.dirty = true
+    b.dirty = false 
 }
 
 func (b *Buffer) NewLine() {
@@ -47,8 +50,7 @@ func (b *Buffer) NewLine() {
 
     b.cursor.x++
     b.cursor.y = 0
-
-    return
+    b.dirty = true
 }
 
 func (b *Buffer) Insert(data rune) {
@@ -73,6 +75,7 @@ func (b *Buffer) Insert(data rune) {
 
     copy(b.lines[x].txt[y+1:], b.lines[x].txt[y:])
     b.lines[x].txt[y] = data
+    b.dirty = true
 }
 
 func (b *Buffer) InsertTab() {
@@ -99,6 +102,7 @@ func (b *Buffer) Delete() {
     b.lastModifiedCh = fmt.Sprintf("-%s", string(b.lines[x].txt[y-1]))
     b.cursor.y --
     b.removeRune(b.cursor)
+    b.dirty = true
 }
 
 func (b *Buffer) removeLine(x int) {
@@ -115,4 +119,51 @@ func (b *Buffer) removeRune(cursor *Pos) {
         copy(b.lines[x].txt[y:], b.lines[x].txt[y+1:])
     }
     b.lines[x].txt = b.lines[x].txt[:len(b.lines[x].txt) - 1]
+}
+
+func (b *Buffer) Open(c *Pos, path string) (error) {
+    f, err := os.Open(path)
+    if err != nil {
+        return err
+    }
+    defer f.Close()
+
+    b.New(c)
+    scanner := bufio.NewScanner(f)
+    for scanner.Scan() {
+        b.lines = append(b.lines, line{txt: []rune(scanner.Text())})
+    }
+
+    b.filePath = path
+    return nil
+}
+
+func (b *Buffer) Save(path string) (int, error) {
+    f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+    if err != nil {
+        return 0, err
+    }
+    defer f.Close()
+
+    writer := bufio.NewWriter(f)
+
+    totalbyte := 0
+    for _, l := range b.lines {
+        for _, d := range l.txt {
+            wbyte, err := writer.WriteString(string(d))
+            if err != nil {
+                return 0, err
+            }
+            totalbyte += wbyte
+        }
+        wbyte, err := writer.WriteString("\n")
+        if err != nil {
+            return 0, err
+        }
+        totalbyte += wbyte
+    }
+    writer.Flush()
+
+    b.dirty = false
+    return totalbyte, nil
 }

@@ -87,8 +87,12 @@ func (r *Render) drawStatusline(mode Mode) {
         tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, " HELP PAGE | Press ^X to return")
         return
     }
-    if mode == FileMode {
+    if mode == FileOpenMode {
         tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, " INPUT A FILE NAME | Press Enter to open")
+        return
+    }
+    if mode == FileSaveMode {
+        tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, " INPUT A FILE NAME | Press Enter to save")
         return
     }
     currLineLen := 0
