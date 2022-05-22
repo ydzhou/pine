@@ -1,101 +1,227 @@
-package ste
+package pine
 
 import (
-    "os"
-    "bufio"
-    "github.com/ydzhou/ste/internal/term"
+	"fmt"
+
+	"github.com/mattn/go-runewidth"
+	tm "github.com/nsf/termbox-go"
 )
 
 type Editor struct {
-    term term.Term
-    buf Buffer
-    reader *bufio.Reader
+    buf *Buffer
     render Render
-    cursorX, cursorY int
-    rowOffset, colOffset int
+    miscBuf *Buffer
+    cursor *Pos
+    miscCursor *Pos
+    mode Mode
+}
+
+type Pos struct {
+    x, y int
 }
 
 func (e *Editor) Init() {
-    e.term = term.Term{}
-    e.buf = Buffer{}
-    e.reader = bufio.NewReader(os.Stdin)
+    e.cursor = &Pos{0, 0}
+    e.miscCursor = &Pos{0, 0}
+    e.buf = &Buffer{}
+    e.miscBuf = &Buffer{}
+    e.buf.New(e.cursor)
     e.render = Render{}
-    e.cursorX = 0
-    e.cursorY = 0
-    e.buf.New()
+    e.render.Init(e.buf, e.cursor)
 }
 
-func (e *Editor) Start() {
-    _ = e.term.Raw()
+func (e *Editor) Start(path string) {
+    err := tm.Init()
+    if err != nil {
+        panic(err)
+    }
+    defer tm.Close()
 
-    e.render.Clear()
-
-    defer e.term.Reset()
-
+    msg := ""
+    if len(path) > 0 {
+        msg = e.Open(path)
+    }
+    e.render.DrawScreen(e.mode, msg)
     for {
-        e.render.DrawScreen(e.buf, e.cursorX, e.cursorY, e.rowOffset, e.colOffset)
         if e.process() {
             break
         }
     }
 
     e.render.Clear()
+    tm.Flush()
 }
 
 func (e *Editor) process() bool {
-    keyAscii, key, special := e.readKeyPress()
-    if special {
-    switch keyAscii {
-    case CTRL_Q:
+    event := tm.PollEvent()
+    // TODO: mouse support
+    // 1. scroll by middle wheel
+    // 2. jump cursor by clicking mouse
+    if event.Type != tm.EventKey {
+        return false
+    }
+    isExit := false
+    msg := ""
+    switch e.mode {
+    case EditMode:
+        isExit = e.processEditMode(event)
+    case FileOpenMode:
+        msg = e.processOpenFileMode(event)
+    case FileSaveMode:
+        msg = e.processSaveFileMode(event)
+    case HelpMode:
+        e.processHelpMode(event)
+    default:
+        panic("unsupported edit mode")
+    }
+    e.render.DrawScreen(e.mode, msg)
+    return isExit
+}
+
+func (e *Editor) processOpenFileMode(event tm.Event) string {
+    msg := "trying to open file..."
+    switch event.Key {
+    case tm.KeyCtrlX:
+        e.mode = EditMode
+        e.fileModeToEdit()
+    case tm.KeyBackspace, tm.KeyBackspace2:
+        e.miscBuf.Delete()
+    case tm.KeyEnter:
+        msg = e.Open(string(e.miscBuf.lines[0].txt))
+    default:
+        if runewidth.RuneWidth(event.Ch) > 0 {
+            e.miscBuf.Insert(event.Ch)
+        }
+    }
+    e.render.SyncCursorToView()
+    return msg
+}
+
+func (e *Editor) processSaveFileMode(event tm.Event) string {
+    msg := "trying to save file..."
+    switch event.Key {
+    case tm.KeyCtrlX:
+        e.mode = EditMode
+        e.fileModeToEdit()
+    case tm.KeyBackspace, tm.KeyBackspace2:
+        e.miscBuf.Delete()
+    case tm.KeyEnter:
+        msg = e.Save(string(e.miscBuf.lines[0].txt))
+    default:
+        if runewidth.RuneWidth(event.Ch) > 0 {
+            e.miscBuf.Insert(event.Ch)
+        }
+    }
+    e.render.SyncCursorToView()
+    return msg
+}
+
+func (e *Editor) processHelpMode(event tm.Event) {
+    if event.Key == tm.KeyCtrlX {
+        e.mode = EditMode
+    }
+}
+
+func (e *Editor) processEditMode(event tm.Event) bool {
+    switch event.Key {
+    case tm.KeyCtrlX:
+        tm.Flush()
         return true
-    case ARROW_UP, ARROW_DOWN, ARROW_RIGHT, ARROW_LEFT:
-        e.moveCursor(keyAscii)
+    case tm.KeyCtrlR:
+        e.mode = FileOpenMode
+        e.initOpenFileMode()
+    case tm.KeyCtrlO:
+        e.mode = FileSaveMode
+        e.initSaveFileMode()
+    case tm.KeyCtrlSlash:
+        e.mode = HelpMode
+    case tm.KeyCtrlA:
+        e.cursor.y = 0
+    case tm.KeyCtrlE:
+        e.moveCursorToEOL()
+    case tm.KeyCtrlV:
+        e.render.moveCursorToNextHalfScreen()
+    case tm.KeyCtrlZ:
+        e.render.moveCursorToPrevHalfScreen()
+    case tm.KeyArrowUp, tm.KeyArrowDown, tm.KeyArrowLeft, tm.KeyArrowRight:
+        e.moveCursor(event.Key)
         break
-    case ENTER:
-        e.buf.NewLine(e.cursorX, e.cursorY)
-        e.cursorX ++
-        e.cursorY = 0
+    case tm.KeyEnter:
+        e.buf.NewLine()
         break
+    case tm.KeyBackspace, tm.KeyBackspace2:
+        e.buf.Delete()
+        break
+    case tm.KeySpace:
+        e.buf.Insert(rune(' '))
+    case tm.KeyTab:
+        e.buf.InsertTab() 
+    default:
+        if runewidth.RuneWidth(event.Ch) > 0 {
+            e.buf.Insert(event.Ch)
+        }
     }
-    } else {
-        e.buf.Insert(e.cursorX, e.cursorY, key)
-        e.cursorY ++
-    }
+    e.render.SyncCursorToView()
+    e.render.DrawScreen(e.mode, "")
     return false
 }
 
-func (e *Editor) moveCursor(keyType int) {
-    switch keyType {
-    case ARROW_UP:
-        if e.cursorX > 0 {
-            e.cursorX--
-        }
-    case ARROW_DOWN:
-        if e.cursorX < len(e.buf.lines) - 1 {
-            e.cursorX++
-        }
-    case ARROW_RIGHT:
-        if len(e.buf.lines) > 0 && e.cursorY < len(e.buf.lines[e.cursorX].txt) {
-            e.cursorY++
-        }
-    case ARROW_LEFT:
-        if e.cursorY > 0 {
-            e.cursorY--
-        }
-    }
-    // Reset cursor position if line does not have enough char
-    if e.cursorY > len(e.buf.lines[e.cursorX].txt) {
-        e.cursorY = len(e.buf.lines[e.cursorX].txt)
-    }
-
+func (e *Editor) moveCursor(keyType tm.Key) {
+    e.render.MoveCursor(keyType)
 }
 
-func (e *Editor) Open(fileName string) {
-    rd, err := os.Open(fileName)
-    if err != nil {
-        panic(err)
+func (e *Editor) moveCursorToEOL() {
+    if len(e.buf.lines) == 0 {
+        e.cursor.y = 0
     }
-    defer rd.Close()
+    e.cursor.y = len(e.buf.lines[e.cursor.x].txt)
+}
 
-    
+func (e *Editor) Open(path string) string {
+    fullPath, err := expandHomeDir(path)
+    if err != nil {
+        return fmt.Sprintf("unable to open file: %s", err)
+    }
+    e.buf = &Buffer{}
+    e.cursor = &Pos{0, 0}
+    err = e.buf.Open(e.cursor, fullPath)
+    if err != nil {
+        return fmt.Sprintf("unable to open file: %s", err)
+    }
+    e.mode = EditMode
+    e.fileModeToEdit()
+    return "file opened successfully"
+}
+
+func (e *Editor) Save(path string) string {
+    fullPath, err := expandHomeDir(path)
+    if err != nil {
+        return fmt.Sprintf("unable to save file: %s", err)
+    }
+    wbyte, err := e.buf.Save(fullPath)
+    if err != nil {
+        return fmt.Sprintf("unable to save file: %s", err)
+    }
+    e.mode = EditMode
+    e.fileModeToEdit()
+    return fmt.Sprintf("file saved %d byte written", wbyte)
+}
+
+func (e *Editor) fileModeToEdit() {
+    e.render.Init(e.buf, e.cursor)
+}
+
+func (e *Editor) initOpenFileMode() {
+    resetPos(e.miscCursor)
+    e.miscBuf.New(e.miscCursor)
+    e.render.Init(e.miscBuf, e.miscCursor)
+}
+
+func (e *Editor) initSaveFileMode() {
+    resetPos(e.miscCursor)
+    e.miscBuf.New(e.miscCursor)
+    for _, r := range e.buf.filePath {
+        e.miscBuf.Insert(rune(r))
+    }
+    e.render.Init(e.miscBuf, e.miscCursor)
 }

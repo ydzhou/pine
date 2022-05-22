@@ -1,12 +1,21 @@
-package ste
+package pine
 
 const (
-    CTRL_Q = iota
-    
-    ARROW_UP = iota
-    ARROW_DOWN = iota
-    ARROW_RIGHT = iota
-    ARROW_LEFT = iota
+    VERSION = "0.2 alpha"
+    TABWIDTH = 8
+)
 
-    ENTER = iota
+type Mode int64
+const (
+    EditMode Mode = iota
+    HelpMode
+    FileOpenMode
+    FileSaveMode
+    WelcomeMode
+)
+
+type FileOpMode int64
+const (
+    OpenOp FileOpMode = iota
+    SaveOp
 )
