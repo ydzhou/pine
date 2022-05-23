@@ -13,6 +13,7 @@ type Render struct {
     cursor *Pos
     viewCursor *Pos
     viewAnchor *Pos
+    mouseCursor *Pos
 }
 
 func (r *Render) Init(b *Buffer, c *Pos) {
@@ -20,6 +21,7 @@ func (r *Render) Init(b *Buffer, c *Pos) {
     r.cursor = c
     r.viewCursor = &Pos{0, 0}
     r.viewAnchor = &Pos{0, 0}
+    r.mouseCursor = &Pos{0, 0}
 }
 
 func (r *Render) Clear() {
@@ -106,7 +108,7 @@ func (r *Render) drawStatusline(mode Mode) {
     }
     tbprint(0, r.termW - len(filePath), tm.ColorBlack, tm.ColorWhite, filePath)
     tbprint(r.termH - 1, r.termW - 16, tm.ColorDefault, tm.ColorDefault, "^/ Help; ^X Exit")
-    tbprint(r.termH - 1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%d:%d | vc %d:%d | va%d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), currLineLen))
+    tbprint(r.termH - 1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%d:%d | vc %d:%d | va %d:%d | mc %d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, r.mouseCursor.x, r.mouseCursor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), currLineLen))
 }
 
 func (r *Render) drawBuffer() {
@@ -212,6 +214,32 @@ func (r *Render) moveCursorRight() {
         return
     }
     r.cursor.y ++
+}
+
+/*
+ * Mouse position is limited by terminal height and weight
+ * It should be one to one mapped to view cursor position
+ * But there are multi-length rune that we cannot position cursor
+ * in between. So we convert back to cursor first.
+ *
+ */
+func (r *Render) MoveCursorByMouse(p Pos) {
+    r.syncViewCursorToCursor(p)
+}
+
+func (r *Render) syncViewCursorToCursor(p Pos) {
+    if p.x < 0 || ((p.x + r.viewAnchor.x) >= len(r.buf.lines) || p.x >= r.termH - 1 ) {
+        return
+    }
+    currLine := r.buf.lines[p.x + r.viewAnchor.x]
+    lineIndex := 0
+    viewLineIndex := 0
+    for viewLineIndex < p.y + r.viewAnchor.y && lineIndex < len(currLine.txt) {
+        viewLineIndex += runeRenderedWidth(viewLineIndex, currLine.txt[lineIndex])
+        lineIndex ++
+    }
+    r.cursor.x = p.x + r.viewAnchor.x
+    r.cursor.y = lineIndex
 }
 
 func (r *Render) SyncCursorToView() {

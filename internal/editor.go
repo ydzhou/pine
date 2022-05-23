@@ -32,6 +32,7 @@ func (e *Editor) Init() {
 
 func (e *Editor) Start(path string) {
     err := tm.Init()
+    tm.SetInputMode(tm.InputMouse)
     if err != nil {
         panic(err)
     }
@@ -57,7 +58,7 @@ func (e *Editor) process() bool {
     // TODO: mouse support
     // 1. scroll by middle wheel
     // 2. jump cursor by clicking mouse
-    if event.Type != tm.EventKey {
+    if event.Type != tm.EventKey && event.Type != tm.EventMouse {
         return false
     }
     isExit := false
@@ -123,6 +124,37 @@ func (e *Editor) processHelpMode(event tm.Event) {
 }
 
 func (e *Editor) processEditMode(event tm.Event) bool {
+    isExit := false
+    if event.Type == tm.EventKey {
+        isExit = e.processEditModeKey(event)
+    } else {
+        e.processEditModeMouse(event)
+    }
+    e.render.SyncCursorToView()
+    e.render.DrawScreen(e.mode, "")
+    return isExit
+}
+
+func (e *Editor) processEditModeMouse(event tm.Event) {
+    e.render.mouseCursor.x = event.MouseY
+    e.render.mouseCursor.y = event.MouseX
+    switch event.Key {
+    case tm.MouseLeft:
+        e.buf.lastModifiedCh = "+ML"
+        e.moveCursorByMouse(Pos{
+            x: event.MouseY - 1,
+            y: event.MouseX,
+        })
+    case tm.MouseWheelUp:
+        e.moveCursor(tm.KeyArrowUp)
+    case tm.MouseWheelDown:
+        e.moveCursor(tm.KeyArrowDown)
+    default:
+        e.buf.lastModifiedCh = "NA"
+    }
+}
+
+func (e *Editor) processEditModeKey(event tm.Event) bool {
     switch event.Key {
     case tm.KeyCtrlX:
         tm.Flush()
@@ -161,13 +193,15 @@ func (e *Editor) processEditMode(event tm.Event) bool {
             e.buf.Insert(event.Ch)
         }
     }
-    e.render.SyncCursorToView()
-    e.render.DrawScreen(e.mode, "")
     return false
 }
 
 func (e *Editor) moveCursor(keyType tm.Key) {
     e.render.MoveCursor(keyType)
+}
+
+func (e *Editor) moveCursorByMouse(tpos Pos) {
+    e.render.MoveCursorByMouse(tpos)
 }
 
 func (e *Editor) moveCursorToEOL() {
