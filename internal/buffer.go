@@ -20,7 +20,7 @@ type line struct {
 
 func (b *Buffer) New(cursor *Pos) {
 	b.cursor = cursor
-	b.lines = []line{line{}}
+	b.lines = []line{}
 	b.lastModifiedCh = "NA"
 	b.dirty = false
 }
