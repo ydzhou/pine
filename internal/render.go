@@ -16,6 +16,7 @@ type Render struct {
 	viewCursor         *Pos
 	viewAnchor         *Pos
 	mouseCursor        *Pos
+	sett               *Setting
 }
 
 func (r *Render) Init(b *Buffer, c *Pos) {
@@ -112,7 +113,9 @@ func (r *Render) drawStatusline(mode Mode) {
 	}
 	tbprint(0, r.termW-len(filePath), tm.ColorBlack, tm.ColorWhite, filePath)
 	tbprint(r.termH-1, r.termW-16, tm.ColorDefault, tm.ColorDefault, "^/ Help; ^X Exit")
-	tbprint(r.termH-1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%d:%d | vc %d:%d | va %d:%d | mc %d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, r.mouseCursor.x, r.mouseCursor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), currLineLen))
+	if r.sett.IsDebug {
+		tbprint(r.termH-1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%d:%d | vc %d:%d | va %d:%d | mc %d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, r.mouseCursor.x, r.mouseCursor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), currLineLen))
+	}
 }
 
 func (r *Render) drawBuffer() {

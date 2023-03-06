@@ -14,20 +14,22 @@ type Editor struct {
 	cursor     *Pos
 	miscCursor *Pos
 	mode       Mode
+	sett       *Setting
 }
 
 type Pos struct {
 	x, y int
 }
 
-func (e *Editor) Init() {
+func (e *Editor) Init(sett *Setting) {
 	e.cursor = &Pos{0, 0}
 	e.miscCursor = &Pos{0, 0}
 	e.buf = &Buffer{}
 	e.miscBuf = &Buffer{}
 	e.buf.New(e.cursor)
-	e.render = Render{}
+	e.render = Render{sett: sett}
 	e.render.Init(e.buf, e.cursor)
+	e.sett = sett
 }
 
 func (e *Editor) Start(path string) {
