@@ -26,7 +26,7 @@ It has a very simple and retro editing style, yet I add few modern features to s
 
 `golang` is the only requirement.
 
-run `make build`
+run `make tools` and `make build`
 
 move compiled binary file `pine` to any directory you prefer, e.g. `/usr/local/bin` and include in the `PATH`
 
