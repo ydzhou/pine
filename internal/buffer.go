@@ -60,7 +60,7 @@ func (b *Buffer) Insert(data rune) {
 	b.lastModifiedCh = fmt.Sprintf("+%s", string(data))
 
 	// Append a new line if cursor is under the last line
-	if x == len(b.lines)-1 {
+	if x == len(b.lines) {
 		b.lines = append(b.lines, line{})
 	}
 
