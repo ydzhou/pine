@@ -22,7 +22,6 @@ func parseInput(args []string) (*pine.Setting, string) {
 			continue
 		}
 		if arg == "--debug" {
-			sett := &pine.Setting{}
 			sett.IsDebug = true
 		} else if arg == "--version" || arg == "-v" {
 			printVersion()
