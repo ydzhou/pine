@@ -256,13 +256,14 @@ func (r *Render) syncViewCursorToCursor(p Pos) {
 func (r *Render) SyncCursorToView() {
 	r.viewCursor.x = r.cursor.x
 	r.viewCursor.y = 0
-	currLine := &r.buf.lines[r.cursor.x]
-	if len(r.buf.lines) > 0 && len(currLine.txt) > 0 {
-		for j := 0; j < r.cursor.y; j++ {
-			r.viewCursor.y += runeRenderedWidth(r.viewCursor.y, currLine.txt[j])
+	if len(r.buf.lines) > 0 {
+		currLine := &r.buf.lines[r.cursor.x]
+		if len(currLine.txt) > 0 {
+			for j := 0; j < r.cursor.y; j++ {
+				r.viewCursor.y += runeRenderedWidth(r.viewCursor.y, currLine.txt[j])
+			}
 		}
 	}
-
 	r.offsetView()
 }
 
