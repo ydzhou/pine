@@ -1,4 +1,4 @@
-TARGET=pine
+TARGET=pe
 GOBIN=$(GOPATH)/bin
 
 tools:
@@ -20,10 +20,13 @@ clean:
 	rm $(TARGET)
 
 .PHONY: build
-build: fmt lint import
+build:
 	@echo $(GOFILES)
-	go build -o $(TARGET) cmd/pine/main.go
+	go build -o $(TARGET) ./cmd/pine/
 
 .PHONY: run
 run:
 	go run cmd/pine/main.go
+
+.PHONY: all
+all: fmt lint import build

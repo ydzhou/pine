@@ -56,7 +56,7 @@ func (r *Render) DrawScreen(mode Mode, msg string) {
 	}
 
 	if r.buf == nil {
-		panic("buffer is null while in edit/file mode")
+		log.Fatalln("buffer is null while in edit/file mode")
 	}
 
 	r.drawBuffer()
@@ -107,14 +107,18 @@ func (r *Render) drawStatusline(mode Mode) {
 		currLineLen = len(r.buf.lines[r.cursor.x].txt)
 	}
 	tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf("Pine Editor v%s", VERSION))
-	filePath := "New Buffer"
-	if r.buf.filePath != "" {
-		filePath = r.buf.filePath
-	}
+	filePath := getFilename(r.buf.filePath)
 	tbprint(0, r.termW-len(filePath), tm.ColorBlack, tm.ColorWhite, filePath)
-	tbprint(r.termH-1, r.termW-16, tm.ColorDefault, tm.ColorDefault, "^/ Help; ^X Exit")
+	statusTailMsg := "^/ Help    ^X Exit"
+	tbprint(r.termH-1, r.termW-len(statusTailMsg), tm.ColorDefault, tm.ColorDefault, statusTailMsg)
 	if r.sett.IsDebug {
 		tbprint(r.termH-1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%d:%d | vc %d:%d | va %d:%d | mc %d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, r.mouseCursor.x, r.mouseCursor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), currLineLen))
+	} else {
+		linePer := 0
+		if len(r.buf.lines) > 0 {
+			linePer = int((r.cursor.x + 1) * 100 / len(r.buf.lines))
+		}
+		tbprint(r.termH-1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%06d,%06d %4d%%", r.cursor.x, r.cursor.y, linePer))
 	}
 }
 
@@ -212,7 +216,7 @@ func (r *Render) moveCursorDown() {
 
 func (r *Render) moveCursorLeft() {
 	if r.cursor.y == 0 && r.viewAnchor.y > 0 {
-		panic("cursor and viewpoint out of sync")
+		log.Fatalf("cursor %d and viewpoint %d out of sync", r.cursor.y, r.viewAnchor.y)
 	}
 	if r.cursor.y == 0 {
 		return

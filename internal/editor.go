@@ -24,9 +24,7 @@ type Pos struct {
 func (e *Editor) Init(sett *Setting) {
 	e.cursor = &Pos{0, 0}
 	e.miscCursor = &Pos{0, 0}
-	e.buf = &Buffer{}
 	e.miscBuf = &Buffer{}
-	e.buf.New(e.cursor)
 	e.render = Render{sett: sett}
 	e.render.Init(e.buf, e.cursor)
 	e.sett = sett
@@ -40,10 +38,7 @@ func (e *Editor) Start(path string) {
 	}
 	defer tm.Close()
 
-	msg := ""
-	if len(path) > 0 {
-		msg = e.Open(path)
-	}
+	msg := e.Open(path)
 	e.render.DrawScreen(e.mode, msg)
 	for {
 		if e.process() {
@@ -71,7 +66,7 @@ func (e *Editor) process() bool {
 	case FileOpenMode:
 		msg = e.processOpenFileMode(event)
 	case FileSaveMode:
-		msg = e.processSaveFileMode(event)
+		msg = e.processSaveFileMode(event, e.buf.filePath)
 	case HelpMode:
 		e.processHelpMode(event)
 	default:
@@ -100,7 +95,7 @@ func (e *Editor) processOpenFileMode(event tm.Event) string {
 	return msg
 }
 
-func (e *Editor) processSaveFileMode(event tm.Event) string {
+func (e *Editor) processSaveFileMode(event tm.Event, filepath string) string {
 	msg := "trying to save file..."
 	switch event.Key {
 	case tm.KeyCtrlX:
@@ -213,17 +208,20 @@ func (e *Editor) moveCursorToEOL() {
 func (e *Editor) Open(path string) string {
 	fullPath, err := expandHomeDir(path)
 	if err != nil {
-		return fmt.Sprintf("unable to open file: %s", err)
+		return fmt.Sprintf("invalid filepath: %s", err)
 	}
 	e.buf = &Buffer{}
 	e.cursor = &Pos{0, 0}
-	err = e.buf.Open(e.cursor, fullPath)
-	if err != nil {
-		return fmt.Sprintf("unable to open file: %s", err)
+	state := e.buf.New(e.cursor, fullPath)
+	msg := fmt.Sprintf("Open file %s", e.buf.filePath)
+	if state == NotFound {
+		msg = fmt.Sprintf("Create new file %s", e.buf.filePath)
+	} else if state == HasError {
+		msg = "Fail to open file"
 	}
 	e.mode = EditMode
 	e.fileModeToEdit()
-	return "file opened successfully"
+	return msg
 }
 
 func (e *Editor) Save(path string) string {
@@ -246,15 +244,13 @@ func (e *Editor) fileModeToEdit() {
 
 func (e *Editor) initOpenFileMode() {
 	resetPos(e.miscCursor)
-	e.miscBuf.New(e.miscCursor)
+	e.miscBuf.New(e.miscCursor, "")
 	e.render.Init(e.miscBuf, e.miscCursor)
 }
 
 func (e *Editor) initSaveFileMode() {
 	resetPos(e.miscCursor)
-	e.miscBuf.New(e.miscCursor)
-	for _, r := range e.buf.filePath {
-		e.miscBuf.Insert(rune(r))
-	}
+	e.miscBuf.New(e.miscCursor, "")
+	e.miscBuf.InsertString(e.buf.filePath)
 	e.render.Init(e.miscBuf, e.miscCursor)
 }

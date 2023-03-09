@@ -34,9 +34,22 @@ func expandHomeDir(path string) (string, error) {
 	} else if strings.HasPrefix(path, "~/") {
 		fullPath = filepath.Join(homeDir, path[2:])
 	}
+	fullPath = getAbsoluteFilePath(fullPath)
 	if err != nil {
 		return "", err
 	}
 
 	return fullPath, nil
+}
+
+func getAbsoluteFilePath(path string) string {
+	if absolutePath, err := filepath.Abs(path); err == nil {
+		return absolutePath
+	} else {
+		return "NA"
+	}
+}
+
+func getFilename(path string) string {
+	return filepath.Base(path)
 }

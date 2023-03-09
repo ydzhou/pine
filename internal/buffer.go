@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Buffer struct {
@@ -18,11 +20,24 @@ type line struct {
 	txt []rune
 }
 
-func (b *Buffer) New(cursor *Pos) {
+func (b *Buffer) New(cursor *Pos, path string) FileOpenState {
 	b.cursor = cursor
 	b.lines = []line{}
 	b.lastModifiedCh = "NA"
 	b.dirty = false
+	b.filePath = path
+	if path == "" {
+		b.filePath = getAbsoluteFilePath(DEFAULT_BUFFERNAME)
+	}
+	err := b.open()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return NotFound
+		}
+		log.Warnf("unable to open file %s", path)
+		return HasError
+	}
+	return Success
 }
 
 func (b *Buffer) NewLine() {
@@ -121,20 +136,17 @@ func (b *Buffer) removeRune(cursor *Pos) {
 	b.lines[x].txt = b.lines[x].txt[:len(b.lines[x].txt)-1]
 }
 
-func (b *Buffer) Open(c *Pos, path string) error {
-	f, err := os.Open(path)
+func (b *Buffer) open() error {
+	f, err := os.Open(b.filePath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	b.New(c)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		b.lines = append(b.lines, line{txt: []rune(scanner.Text())})
 	}
-
-	b.filePath = path
 	return nil
 }
 
@@ -164,6 +176,13 @@ func (b *Buffer) Save(path string) (int, error) {
 	}
 	writer.Flush()
 
+	b.filePath = path
 	b.dirty = false
 	return totalbyte, nil
+}
+
+func (b *Buffer) InsertString(s string) {
+	for _, d := range s {
+		b.Insert(d)
+	}
 }
