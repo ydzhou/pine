@@ -21,23 +21,59 @@ type line struct {
 }
 
 func (b *Buffer) New(cursor *Pos, path string) FileOpenState {
+	b.init(cursor)
+	b.filePath = path
+	b.newEmptyBuffer()
+	if path != "" {
+		return b.openFile(path)
+	}
+	return Success
+}
+
+func (b *Buffer) init(cursor *Pos) {
 	b.cursor = cursor
 	b.lines = []line{}
 	b.lastModifiedCh = "NA"
 	b.dirty = false
-	b.filePath = path
-	if path == "" {
-		b.filePath = getAbsoluteFilePath(DEFAULT_BUFFERNAME)
-	}
-	err := b.open()
+}
+
+func (b *Buffer) newEmptyBuffer() {
+	b.filePath = getAbsoluteFilePath(DEFAULT_BUFFERNAME)
+}
+
+func (b *Buffer) openFile(path string) FileOpenState {
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return NotFound
 		}
-		log.Warnf("unable to open file %s", path)
+		log.Warnf("fail to open file %s", path)
 		return HasError
 	}
+	// TODO: implement function to properly handle directory reading
+	if isDirectory(f) {
+		return HasError
+	}
+
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		b.lines = append(b.lines, line{txt: []rune(scanner.Text())})
+	}
+	b.filePath = path
 	return Success
+}
+
+func isDirectory(f *os.File) bool {
+	stat, err := f.Stat()
+	if err != nil {
+		log.Warnf("File stat failure: %s", f.Name())
+		return false
+	}
+	if stat.IsDir() {
+		return true
+	}
+	return false
 }
 
 func (b *Buffer) NewLine() {
@@ -134,20 +170,6 @@ func (b *Buffer) removeRune(cursor *Pos) {
 		copy(b.lines[x].txt[y:], b.lines[x].txt[y+1:])
 	}
 	b.lines[x].txt = b.lines[x].txt[:len(b.lines[x].txt)-1]
-}
-
-func (b *Buffer) open() error {
-	f, err := os.Open(b.filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		b.lines = append(b.lines, line{txt: []rune(scanner.Text())})
-	}
-	return nil
 }
 
 func (b *Buffer) Save(path string) (int, error) {

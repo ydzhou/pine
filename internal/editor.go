@@ -210,6 +210,9 @@ func (e *Editor) Open(path string) string {
 	if err != nil {
 		return fmt.Sprintf("invalid filepath: %s", err)
 	}
+	if path == "" {
+		fullPath = ""
+	}
 	e.buf = &Buffer{}
 	e.cursor = &Pos{0, 0}
 	state := e.buf.New(e.cursor, fullPath)
