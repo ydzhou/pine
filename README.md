@@ -14,13 +14,13 @@ It has a very simple and retro editing style, yet I add few modern features to s
 
 ## Roadmap
 
-* Multiple buffers
-* Wrap the line
-* Auto indention
-* Mouse support for scrolling and moving the cursor
-* Copy and paste within the editor
-* Undo
-* Search text
+- [x] Mouse support for scrolling and moving the cursor
+- [ ] Multiple buffers
+- [ ] Wrap the line
+- [ ] Auto indention
+- [ ] Copy and paste within the editor
+- [ ] Undo
+- [ ] Search text
 
 ## Install
 
