@@ -3,7 +3,7 @@ GOBIN=$(GOPATH)/bin
 
 tools:
 	@echo $(GOBIN)
-	go install golang.org/x/tools/cmd/goimports@latest
+	go install golang.org/x/tools/cmd/goimports@v0.8.0
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.51.2
 
 .PHONY: fmt
