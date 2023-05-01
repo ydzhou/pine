@@ -180,6 +180,8 @@ func (e *Editor) processEditModeKey() {
 		e.buf.NewLine()
 	case DeleteChOp:
 		e.buf.Delete()
+	case DeleteLineOp:
+		e.buf.DeleteLine()
 	case InsertSpaceOp:
 		e.buf.Insert(rune(' '))
 	case InsertTabOp:

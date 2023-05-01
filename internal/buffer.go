@@ -133,6 +133,18 @@ func (b *Buffer) InsertTab() {
 	b.Insert(rune('\t'))
 }
 
+func (b *Buffer) DeleteLine() {
+	if b.isEmpty() {
+		return
+	}
+	b.removeLine()
+	if b.cursor.x > 0 {
+		b.cursor.x--
+	}
+	b.cursor.y = 0
+	b.lastModifiedCh = "-line"
+}
+
 func (b *Buffer) Delete() {
 	x := b.cursor.x
 	y := b.cursor.y
@@ -142,30 +154,35 @@ func (b *Buffer) Delete() {
 	}
 	// Remove newline
 	if y == 0 {
-		b.lastModifiedCh = string("- newline")
 		b.cursor.y = len(b.lines[x-1].txt)
 		b.lines[x-1].txt = append(b.lines[x-1].txt, b.lines[x].txt...)
-		b.removeLine(x)
+		b.removeLine()
 		b.cursor.x = b.cursor.x - 1
 		b.lastModifiedCh = "-newline"
 		return
 	}
 	b.lastModifiedCh = fmt.Sprintf("-%s", string(b.lines[x].txt[y-1]))
 	b.cursor.y--
-	b.removeRune(b.cursor)
+	b.removeRune()
 	b.dirty = true
 }
 
-func (b *Buffer) removeLine(x int) {
+func (b *Buffer) removeLine() {
+	x := b.cursor.x
+	if x == 0 {
+		b.lines[0] = line{}
+	}
 	if x < len(b.lines)-1 {
 		copy(b.lines[x:], b.lines[x+1:])
 	}
-	b.lines = b.lines[:len(b.lines)-1]
+	if len(b.lines) > 0 {
+		b.lines = b.lines[:len(b.lines)-1]
+	}
 }
 
-func (b *Buffer) removeRune(cursor *Pos) {
-	x := cursor.x
-	y := cursor.y
+func (b *Buffer) removeRune() {
+	x := b.cursor.x
+	y := b.cursor.y
 	if y < len(b.lines[x].txt)-1 {
 		copy(b.lines[x].txt[y:], b.lines[x].txt[y+1:])
 	}

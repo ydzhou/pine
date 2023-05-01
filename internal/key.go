@@ -44,6 +44,8 @@ func mapKey(event tm.Event) KeyOps {
 		return NextHalfPageOp
 	case tm.KeyCtrlZ:
 		return PrevHalfPageOp
+	case tm.KeyCtrlK:
+		return DeleteLineOp
 	case tm.KeyArrowUp:
 		return MoveCursorUpOp
 	case tm.KeyArrowDown:

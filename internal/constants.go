@@ -60,4 +60,5 @@ const (
 	InsertTabOp
 	InsertEnterOp
 	DeleteChOp
+	DeleteLineOp
 )
