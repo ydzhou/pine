@@ -208,3 +208,7 @@ func (b *Buffer) InsertString(s string) {
 		b.Insert(d)
 	}
 }
+
+func (b *Buffer) isEmpty() bool {
+	return len(b.lines) == 0
+}

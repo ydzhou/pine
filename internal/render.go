@@ -176,25 +176,10 @@ func (r *Render) drawCursor() {
  * Update cursor position and view based on cursor movement
  * Cursor x,y are determined by view x,y
  */
-func (r *Render) MoveCursor(
-	keyType tm.Key,
-) {
-	if len(r.buf.lines) == 0 {
+func (r *Render) moveCursorUp() {
+	if r.buf.isEmpty() {
 		return
 	}
-	switch keyType {
-	case tm.KeyArrowUp:
-		r.moveCursorUp()
-	case tm.KeyArrowDown:
-		r.moveCursorDown()
-	case tm.KeyArrowLeft:
-		r.moveCursorLeft()
-	case tm.KeyArrowRight:
-		r.moveCursorRight()
-	}
-}
-
-func (r *Render) moveCursorUp() {
 	if r.cursor.x == 0 {
 		return
 	}
@@ -205,6 +190,9 @@ func (r *Render) moveCursorUp() {
 }
 
 func (r *Render) moveCursorDown() {
+	if r.buf.isEmpty() {
+		return
+	}
 	if r.cursor.x == len(r.buf.lines)-1 {
 		return
 	}
@@ -215,6 +203,9 @@ func (r *Render) moveCursorDown() {
 }
 
 func (r *Render) moveCursorLeft() {
+	if r.buf.isEmpty() {
+		return
+	}
 	if r.cursor.y == 0 && r.viewAnchor.y > 0 {
 		log.Fatalf("cursor %d and viewpoint %d out of sync", r.cursor.y, r.viewAnchor.y)
 	}
@@ -225,6 +216,9 @@ func (r *Render) moveCursorLeft() {
 }
 
 func (r *Render) moveCursorRight() {
+	if r.buf.isEmpty() {
+		return
+	}
 	if r.cursor.y == len(r.buf.lines[r.cursor.x].txt) {
 		return
 	}

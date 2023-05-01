@@ -3,7 +3,8 @@ package pine
 import (
 	"fmt"
 
-	"github.com/mattn/go-runewidth"
+	log "github.com/sirupsen/logrus"
+
 	tm "github.com/nsf/termbox-go"
 )
 
@@ -15,6 +16,8 @@ type Editor struct {
 	miscCursor *Pos
 	mode       Mode
 	sett       *Setting
+	key        *KeyMapper
+	isExit     bool
 }
 
 type Pos struct {
@@ -22,12 +25,14 @@ type Pos struct {
 }
 
 func (e *Editor) Init(sett *Setting) {
+	e.isExit = false
 	e.cursor = &Pos{0, 0}
 	e.miscCursor = &Pos{0, 0}
 	e.miscBuf = &Buffer{}
 	e.render = Render{sett: sett}
 	e.render.Init(e.buf, e.cursor)
 	e.sett = sett
+	e.key = &KeyMapper{}
 }
 
 func (e *Editor) Start(path string) {
@@ -40,7 +45,7 @@ func (e *Editor) Start(path string) {
 
 	msg := e.Open(path)
 	e.render.DrawScreen(e.mode, msg)
-	for {
+	for !e.isExit {
 		if e.process() {
 			break
 		}
@@ -52,84 +57,76 @@ func (e *Editor) Start(path string) {
 
 func (e *Editor) process() bool {
 	event := tm.PollEvent()
-	// TODO: mouse support
-	// 1. scroll by middle wheel
-	// 2. jump cursor by clicking mouse
 	if event.Type != tm.EventKey && event.Type != tm.EventMouse {
 		return false
 	}
 	isExit := false
 	msg := ""
+	e.key.Map(event)
 	switch e.mode {
 	case EditMode:
-		isExit = e.processEditMode(event)
+		e.processEditMode(event)
 	case FileOpenMode:
-		msg = e.processOpenFileMode(event)
+		msg = e.processOpenFileMode()
 	case FileSaveMode:
-		msg = e.processSaveFileMode(event, e.buf.filePath)
+		msg = e.processSaveFileMode(e.buf.filePath)
 	case HelpMode:
-		e.processHelpMode(event)
+		e.processHelpMode()
 	default:
-		panic("unsupported edit mode")
+		log.Fatal("unsupported edit mode")
 	}
 	e.render.DrawScreen(e.mode, msg)
 	return isExit
 }
 
-func (e *Editor) processOpenFileMode(event tm.Event) string {
+func (e *Editor) processOpenFileMode() string {
 	msg := "trying to open file..."
-	switch event.Key {
-	case tm.KeyCtrlX:
+	switch e.key.op {
+	case ExitOp:
 		e.mode = EditMode
 		e.fileModeToEdit()
-	case tm.KeyBackspace, tm.KeyBackspace2:
+	case DeleteChOp:
 		e.miscBuf.Delete()
-	case tm.KeyEnter:
+	case InsertEnterOp:
 		msg = e.Open(string(e.miscBuf.lines[0].txt))
-	default:
-		if runewidth.RuneWidth(event.Ch) > 0 {
-			e.miscBuf.Insert(event.Ch)
-		}
+	case InsertChOp:
+		e.miscBuf.Insert(e.key.ch)
 	}
 	e.render.SyncCursorToView()
 	return msg
 }
 
-func (e *Editor) processSaveFileMode(event tm.Event, filepath string) string {
+func (e *Editor) processSaveFileMode(filepath string) string {
 	msg := "trying to save file..."
-	switch event.Key {
-	case tm.KeyCtrlX:
+	switch e.key.op {
+	case ExitOp:
 		e.mode = EditMode
 		e.fileModeToEdit()
-	case tm.KeyBackspace, tm.KeyBackspace2:
+	case DeleteChOp:
 		e.miscBuf.Delete()
-	case tm.KeyEnter:
+	case InsertEnterOp:
 		msg = e.Save(string(e.miscBuf.lines[0].txt))
-	default:
-		if runewidth.RuneWidth(event.Ch) > 0 {
-			e.miscBuf.Insert(event.Ch)
-		}
+	case InsertChOp:
+		e.miscBuf.Insert(e.key.ch)
 	}
 	e.render.SyncCursorToView()
 	return msg
 }
 
-func (e *Editor) processHelpMode(event tm.Event) {
-	if event.Key == tm.KeyCtrlX {
+func (e *Editor) processHelpMode() {
+	if e.key.op == ExitOp {
 		e.mode = EditMode
 	}
 }
 
-func (e *Editor) processEditMode(event tm.Event) bool {
-	isExit := false
+func (e *Editor) processEditMode(event tm.Event) {
 	if event.Type == tm.EventKey {
-		isExit = e.processEditModeKey(event)
+		e.processEditModeKey()
 	} else {
 		e.processEditModeMouse(event)
 	}
 	e.render.SyncCursorToView()
 	e.render.DrawScreen(e.mode, "")
-	return isExit
 }
 
 func (e *Editor) processEditModeMouse(event tm.Event) {
@@ -143,55 +140,53 @@ func (e *Editor) processEditModeMouse(event tm.Event) {
 			y: event.MouseX,
 		})
 	case tm.MouseWheelUp:
-		e.moveCursor(tm.KeyArrowUp)
+		e.render.moveCursorUp()
 	case tm.MouseWheelDown:
-		e.moveCursor(tm.KeyArrowDown)
+		e.render.moveCursorDown()
 	default:
 		e.buf.lastModifiedCh = "NA"
 	}
 }
 
-func (e *Editor) processEditModeKey(event tm.Event) bool {
-	switch event.Key {
-	case tm.KeyCtrlX:
-		tm.Flush()
-		return true
-	case tm.KeyCtrlR:
+func (e *Editor) processEditModeKey() {
+	switch e.key.op {
+	case ExitOp:
+		e.setExit()
+	case OpenFileOp:
 		e.mode = FileOpenMode
 		e.initOpenFileMode()
-	case tm.KeyCtrlO:
+	case SaveFileOp:
 		e.mode = FileSaveMode
 		e.initSaveFileMode()
-	case tm.KeyCtrlSlash:
+	case HelpOp:
 		e.mode = HelpMode
-	case tm.KeyCtrlA:
+	case GoToBOLOp:
 		e.cursor.y = 0
-	case tm.KeyCtrlE:
+	case GoToEOLOp:
 		e.moveCursorToEOL()
-	case tm.KeyCtrlV:
+	case NextHalfPageOp:
 		e.render.moveCursorToNextHalfScreen()
-	case tm.KeyCtrlZ:
+	case PrevHalfPageOp:
 		e.render.moveCursorToPrevHalfScreen()
-	case tm.KeyArrowUp, tm.KeyArrowDown, tm.KeyArrowLeft, tm.KeyArrowRight:
-		e.moveCursor(event.Key)
-	case tm.KeyEnter:
+	case MoveCursorUpOp:
+		e.render.moveCursorUp()
+	case MoveCursorDownOp:
+		e.render.moveCursorDown()
+	case MoveCursorLeftOp:
+		e.render.moveCursorLeft()
+	case MoveCursorRightOp:
+		e.render.moveCursorRight()
+	case InsertEnterOp:
 		e.buf.NewLine()
-	case tm.KeyBackspace, tm.KeyBackspace2:
+	case DeleteChOp:
 		e.buf.Delete()
-	case tm.KeySpace:
+	case InsertSpaceOp:
 		e.buf.Insert(rune(' '))
-	case tm.KeyTab:
+	case InsertTabOp:
 		e.buf.InsertTab()
-	default:
-		if runewidth.RuneWidth(event.Ch) > 0 {
-			e.buf.Insert(event.Ch)
-		}
+	case InsertChOp:
+		e.buf.Insert(e.key.ch)
 	}
-	return false
-}
-
-func (e *Editor) moveCursor(keyType tm.Key) {
-	e.render.MoveCursor(keyType)
 }
 
 func (e *Editor) moveCursorByMouse(tpos Pos) {
@@ -256,4 +251,8 @@ func (e *Editor) initSaveFileMode() {
 	e.miscBuf.New(e.miscCursor, "")
 	e.miscBuf.InsertString(e.buf.filePath)
 	e.render.Init(e.miscBuf, e.miscCursor)
+}
+
+func (e *Editor) setExit() {
+	e.isExit = true
 }
