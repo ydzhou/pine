@@ -8,8 +8,16 @@ import (
 	tm "github.com/nsf/termbox-go"
 )
 
+/*
+   Buffer list
+   Index reservation
+   1. Help Page
+   2. Default scratch buffer
+*/
+
 type Editor struct {
-	buf        *Buffer
+	bufIdx     int
+	bufs       []*Buffer
 	render     Render
 	miscBuf    *Buffer
 	cursor     *Pos
@@ -30,7 +38,7 @@ func (e *Editor) Init(sett *Setting) {
 	e.miscCursor = &Pos{0, 0}
 	e.miscBuf = &Buffer{}
 	e.render = Render{sett: sett}
-	e.render.Init(e.buf, e.cursor)
+	e.render.Init(e.getBuf(), e.cursor)
 	e.sett = sett
 	e.key = &KeyMapper{}
 }
@@ -69,7 +77,7 @@ func (e *Editor) process() bool {
 	case FileOpenMode:
 		msg = e.processOpenFileMode()
 	case FileSaveMode:
-		msg = e.processSaveFileMode(e.buf.filePath)
+		msg = e.processSaveFileMode(e.getBuf().filePath)
 	case HelpMode:
 		e.processHelpMode()
 	default:
@@ -134,7 +142,7 @@ func (e *Editor) processEditModeMouse(event tm.Event) {
 	e.render.mouseCursor.y = event.MouseX
 	switch event.Key {
 	case tm.MouseLeft:
-		e.buf.lastModifiedCh = "+ML"
+		e.getBuf().lastModifiedCh = "+ML"
 		e.moveCursorByMouse(Pos{
 			x: event.MouseY - 1,
 			y: event.MouseX,
@@ -144,7 +152,7 @@ func (e *Editor) processEditModeMouse(event tm.Event) {
 	case tm.MouseWheelDown:
 		e.render.moveCursorDown()
 	default:
-		e.buf.lastModifiedCh = "NA"
+		e.getBuf().lastModifiedCh = "NA"
 	}
 }
 
@@ -177,17 +185,17 @@ func (e *Editor) processEditModeKey() {
 	case MoveCursorRightOp:
 		e.render.moveCursorRight()
 	case InsertEnterOp:
-		e.buf.NewLine()
+		e.getBuf().NewLine()
 	case DeleteChOp:
-		e.buf.Delete()
+		e.getBuf().Delete()
 	case DeleteLineOp:
-		e.buf.DeleteLine()
+		e.getBuf().DeleteLine()
 	case InsertSpaceOp:
-		e.buf.Insert(rune(' '))
+		e.getBuf().Insert(rune(' '))
 	case InsertTabOp:
-		e.buf.InsertTab()
+		e.getBuf().InsertTab()
 	case InsertChOp:
-		e.buf.Insert(e.key.ch)
+		e.getBuf().Insert(e.key.ch)
 	}
 }
 
@@ -196,10 +204,10 @@ func (e *Editor) moveCursorByMouse(tpos Pos) {
 }
 
 func (e *Editor) moveCursorToEOL() {
-	if len(e.buf.lines) == 0 {
+	if len(e.getBuf().lines) == 0 {
 		e.cursor.y = 0
 	}
-	e.cursor.y = len(e.buf.lines[e.cursor.x].txt)
+	e.cursor.y = len(e.getBuf().lines[e.cursor.x].txt)
 }
 
 func (e *Editor) Open(path string) string {
@@ -229,7 +237,7 @@ func (e *Editor) Save(path string) string {
 	if err != nil {
 		return fmt.Sprintf("unable to save file: %s", err)
 	}
-	wbyte, err := e.buf.Save(fullPath)
+	wbyte, err := e.getBuf().Save(fullPath)
 	if err != nil {
 		return fmt.Sprintf("unable to save file: %s", err)
 	}
@@ -239,7 +247,7 @@ func (e *Editor) Save(path string) string {
 }
 
 func (e *Editor) fileModeToEdit() {
-	e.render.Init(e.buf, e.cursor)
+	e.render.Init(e.getBuf(), e.cursor)
 }
 
 func (e *Editor) initOpenFileMode() {
@@ -251,10 +259,15 @@ func (e *Editor) initOpenFileMode() {
 func (e *Editor) initSaveFileMode() {
 	resetPos(e.miscCursor)
 	e.miscBuf.New(e.miscCursor, "")
-	e.miscBuf.InsertString(e.buf.filePath)
+	e.miscBuf.InsertString(e.getBuf().filePath)
 	e.render.Init(e.miscBuf, e.miscCursor)
 }
 
 func (e *Editor) setExit() {
 	e.isExit = true
+}
+
+// Return the buffer in current render
+func (e *Editor) getBuf() *Buffer {
+	return e.bufs[e.bufIdx]
 }
