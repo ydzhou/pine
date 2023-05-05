@@ -21,11 +21,6 @@ func runeRenderedWidth(
 	return runewidth.RuneWidth(data)
 }
 
-func resetPos(p *Pos) {
-	p.x = 0
-	p.y = 0
-}
-
 func expandHomeDir(path string) (string, error) {
 	homeDir, err := os.UserHomeDir()
 	fullPath := path

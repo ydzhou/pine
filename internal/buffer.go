@@ -14,14 +14,15 @@ type Buffer struct {
 	lastModifiedCh string
 	cursor         *Pos
 	filePath       string
+	readOnly       bool
 }
 
 type line struct {
 	txt []rune
 }
 
-func (b *Buffer) New(cursor *Pos, path string) FileOpenState {
-	b.init(cursor)
+func (b *Buffer) New(path string) FileOpenState {
+	b.init()
 	b.filePath = path
 	b.newEmptyBuffer()
 	if path != "" {
@@ -30,8 +31,8 @@ func (b *Buffer) New(cursor *Pos, path string) FileOpenState {
 	return Success
 }
 
-func (b *Buffer) init(cursor *Pos) {
-	b.cursor = cursor
+func (b *Buffer) init() {
+	b.cursor = &Pos{x: 0, y: 0}
 	b.lines = []line{}
 	b.lastModifiedCh = "NA"
 	b.dirty = false
@@ -39,12 +40,15 @@ func (b *Buffer) init(cursor *Pos) {
 
 func (b *Buffer) newEmptyBuffer() {
 	b.filePath = getAbsoluteFilePath(DEFAULT_BUFFERNAME)
+	b.lines = []line{}
 }
 
 func (b *Buffer) openFile(path string) FileOpenState {
 	f, err := os.Open(path)
 	if err != nil {
+		// If file does not exist, create an empty buffer with given file path
 		if os.IsNotExist(err) {
+			b.filePath = path
 			return NotFound
 		}
 		log.Warnf("fail to open file %s", path)

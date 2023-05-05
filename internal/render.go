@@ -19,9 +19,7 @@ type Render struct {
 	sett               *Setting
 }
 
-func (r *Render) Init(b *Buffer, c *Pos) {
-	r.buf = b
-	r.cursor = c
+func (r *Render) Init() {
 	r.viewCursor = &Pos{0, 0}
 	r.viewAnchor = &Pos{0, 0}
 	r.mouseCursor = &Pos{0, 0}
@@ -43,18 +41,6 @@ func (r *Render) DrawScreen(mode Mode, msg string) {
 
 	r.drawStatusline(mode)
 
-	if mode == HelpMode {
-		r.drawHelpPage()
-		tm.HideCursor()
-		return
-	}
-
-	if mode == WelcomeMode {
-		r.drawWelcomePage()
-		tm.HideCursor()
-		return
-	}
-
 	if r.buf == nil {
 		log.Fatalln("buffer is null while in edit/file mode")
 	}
@@ -71,28 +57,9 @@ func (r *Render) drawMessage(msg string) {
 	tbprint(r.termH-1, 0, tm.ColorRed, tm.ColorDefault, msg)
 }
 
-func (r *Render) drawWelcomePage() {
-	tbprint(2, 0, tm.ColorDefault, tm.ColorDefault, "Press any key to start editing a new file")
-}
-
-func (r *Render) drawHelpPage() {
-	tbprint(2, 0, tm.ColorDefault, tm.ColorDefault, "Files")
-	tbprint(3, 0, tm.ColorDefault, tm.ColorDefault, "^R: open a file")
-	tbprint(4, 0, tm.ColorDefault, tm.ColorDefault, "^O: save a file")
-	tbprint(5, 0, tm.ColorDefault, tm.ColorDefault, "Navigation")
-	tbprint(6, 0, tm.ColorDefault, tm.ColorDefault, "^A: go to start of the line")
-	tbprint(7, 0, tm.ColorDefault, tm.ColorDefault, "^E: go to end of the line")
-	tbprint(8, 0, tm.ColorDefault, tm.ColorDefault, "^V: go to next half screen")
-	tbprint(9, 0, tm.ColorDefault, tm.ColorDefault, "^Z: go to previous half screen")
-}
-
 func (r *Render) drawStatusline(mode Mode) {
 	for i := 0; i < r.termW-1; i++ {
 		tm.SetCell(i, 0, rune(' '), tm.ColorBlack, tm.ColorWhite)
-	}
-	if mode == HelpMode {
-		tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, " HELP PAGE | Press ^X to return")
-		return
 	}
 	if mode == FileOpenMode {
 		tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, " INPUT A FILE NAME | Press Enter to open")
@@ -109,17 +76,21 @@ func (r *Render) drawStatusline(mode Mode) {
 	tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf("Pine Editor v%s", VERSION))
 	filePath := getFilename(r.buf.filePath)
 	tbprint(0, r.termW-len(filePath), tm.ColorBlack, tm.ColorWhite, filePath)
-	statusTailMsg := "^/ Help    ^X Exit"
-	tbprint(r.termH-1, r.termW-len(statusTailMsg), tm.ColorDefault, tm.ColorDefault, statusTailMsg)
-	if r.sett.IsDebug {
-		tbprint(r.termH-1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%d:%d | vc %d:%d | va %d:%d | mc %d:%d | op:%s | tr: %d; crc: %d", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, r.mouseCursor.x, r.mouseCursor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), currLineLen))
-	} else {
-		linePer := 0
-		if len(r.buf.lines) > 0 {
-			linePer = int((r.cursor.x + 1) * 100 / len(r.buf.lines))
-		}
-		tbprint(r.termH-1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%06d,%06d %4d%%", r.cursor.x, r.cursor.y, linePer))
+	linePer := 0
+	if len(r.buf.lines) > 0 {
+		linePer = int((r.cursor.x + 1) * 100 / len(r.buf.lines))
 	}
+	for i := 0; i < r.termW-1; i++ {
+		tm.SetCell(i, r.termH-1, rune(' '), tm.ColorCyan, tm.ColorCyan)
+	}
+	tbprint(r.termH-1, 0, tm.ColorBlack, tm.ColorCyan, fmt.Sprintf("%06d,%06d %4d%%", r.cursor.x, r.cursor.y, linePer))
+	statusTailMsg := "^/ Help    ^X Exit"
+	tbprint(r.termH-1, r.termW-len(statusTailMsg), tm.ColorBlack, tm.ColorCyan, statusTailMsg)
+
+	if r.sett.IsDebug {
+		tbprint(r.termH-1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("%d:%d | vc %d:%d | va %d:%d | mc %d:%d | op:%s | tr: %d; crc: %d;", r.cursor.x, r.cursor.y, r.viewCursor.x, r.viewCursor.y, r.viewAnchor.x, r.viewAnchor.y, r.mouseCursor.x, r.mouseCursor.y, string(r.buf.lastModifiedCh), len(r.buf.lines), currLineLen))
+	}
+
 }
 
 func (r *Render) drawBuffer() {
@@ -252,6 +223,7 @@ func (r *Render) syncViewCursorToCursor(p Pos) {
 }
 
 func (r *Render) SyncCursorToView() {
+	r.cursor = r.buf.cursor
 	r.viewCursor.x = r.cursor.x
 	r.viewCursor.y = 0
 	if len(r.buf.lines) > 0 {

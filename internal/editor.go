@@ -8,24 +8,16 @@ import (
 	tm "github.com/nsf/termbox-go"
 )
 
-/*
-   Buffer list
-   Index reservation
-   1. Help Page
-   2. Default scratch buffer
-*/
-
 type Editor struct {
-	bufIdx     int
-	bufs       []*Buffer
-	render     Render
-	miscBuf    *Buffer
-	cursor     *Pos
-	miscCursor *Pos
-	mode       Mode
-	sett       *Setting
-	key        *KeyMapper
-	isExit     bool
+	bufIdx  int
+	bufs    []*Buffer
+	render  Render
+	miscBuf *Buffer
+	mode    Mode
+	sett    *Setting
+	key     *KeyMapper
+	isExit  bool
+	msg     string
 }
 
 type Pos struct {
@@ -34,13 +26,13 @@ type Pos struct {
 
 func (e *Editor) Init(sett *Setting) {
 	e.isExit = false
-	e.cursor = &Pos{0, 0}
-	e.miscCursor = &Pos{0, 0}
 	e.miscBuf = &Buffer{}
 	e.render = Render{sett: sett}
-	e.render.Init(e.getBuf(), e.cursor)
+	e.render.Init()
 	e.sett = sett
 	e.key = &KeyMapper{}
+	e.bufIdx = DEFAULT_CURR_BUF_INDEX
+	e.bufs = []*Buffer{}
 }
 
 func (e *Editor) Start(path string) {
@@ -51,8 +43,9 @@ func (e *Editor) Start(path string) {
 	}
 	defer tm.Close()
 
-	msg := e.Open(path)
-	e.render.DrawScreen(e.mode, msg)
+	e.Open(path, -1)
+	e.render.cursor = e.getBuf().cursor
+	e.render.DrawScreen(e.mode, e.msg)
 	for !e.isExit {
 		if e.process() {
 			break
@@ -69,26 +62,31 @@ func (e *Editor) process() bool {
 		return false
 	}
 	isExit := false
-	msg := ""
 	e.key.Map(event)
 	switch e.mode {
 	case EditMode:
 		e.processEditMode(event)
 	case FileOpenMode:
-		msg = e.processOpenFileMode()
+		e.processOpenFileMode()
 	case FileSaveMode:
-		msg = e.processSaveFileMode(e.getBuf().filePath)
-	case HelpMode:
-		e.processHelpMode()
+		e.processSaveFileMode(e.getBuf().filePath)
 	default:
 		log.Fatal("unsupported edit mode")
 	}
-	e.render.DrawScreen(e.mode, msg)
+	switch e.mode {
+	case FileOpenMode, FileSaveMode:
+		e.render.buf = e.miscBuf
+		e.render.cursor = e.miscBuf.cursor
+	default:
+		e.render.buf = e.getBuf()
+	}
+	e.render.SyncCursorToView()
+	e.render.DrawScreen(e.mode, e.msg)
 	return isExit
 }
 
-func (e *Editor) processOpenFileMode() string {
-	msg := "trying to open file..."
+func (e *Editor) processOpenFileMode() {
+	e.msg = "trying to open file..."
 	switch e.key.op {
 	case ExitOp:
 		e.mode = EditMode
@@ -96,16 +94,16 @@ func (e *Editor) processOpenFileMode() string {
 	case DeleteChOp:
 		e.miscBuf.Delete()
 	case InsertEnterOp:
-		msg = e.Open(string(e.miscBuf.lines[0].txt))
+		if len(e.miscBuf.lines) > 0 && len(e.miscBuf.lines[0].txt) > 0 {
+			e.Open(string(e.miscBuf.lines[0].txt), -1)
+		}
 	case InsertChOp:
 		e.miscBuf.Insert(e.key.ch)
 	}
-	e.render.SyncCursorToView()
-	return msg
 }
 
-func (e *Editor) processSaveFileMode(filepath string) string {
-	msg := "trying to save file..."
+func (e *Editor) processSaveFileMode(filepath string) {
+	e.msg = "trying to save file..."
 	switch e.key.op {
 	case ExitOp:
 		e.mode = EditMode
@@ -113,28 +111,21 @@ func (e *Editor) processSaveFileMode(filepath string) string {
 	case DeleteChOp:
 		e.miscBuf.Delete()
 	case InsertEnterOp:
-		msg = e.Save(string(e.miscBuf.lines[0].txt))
+		if len(e.miscBuf.lines) > 0 && len(e.miscBuf.lines[0].txt) > 0 {
+			e.Save(string(e.miscBuf.lines[0].txt))
+		}
 	case InsertChOp:
 		e.miscBuf.Insert(e.key.ch)
-	}
-	e.render.SyncCursorToView()
-	return msg
-}
-
-func (e *Editor) processHelpMode() {
-	if e.key.op == ExitOp {
-		e.mode = EditMode
 	}
 }
 
 func (e *Editor) processEditMode(event tm.Event) {
+	e.msg = ""
 	if event.Type == tm.EventKey {
 		e.processEditModeKey()
 	} else {
 		e.processEditModeMouse(event)
 	}
-	e.render.SyncCursorToView()
-	e.render.DrawScreen(e.mode, "")
 }
 
 func (e *Editor) processEditModeMouse(event tm.Event) {
@@ -161,15 +152,13 @@ func (e *Editor) processEditModeKey() {
 	case ExitOp:
 		e.setExit()
 	case OpenFileOp:
-		e.mode = FileOpenMode
-		e.initOpenFileMode()
+		e.toOpenFileMode()
 	case SaveFileOp:
-		e.mode = FileSaveMode
-		e.initSaveFileMode()
+		e.toSaveFileMode()
 	case HelpOp:
-		e.mode = HelpMode
+		e.toHelpPage()
 	case GoToBOLOp:
-		e.cursor.y = 0
+		e.getBuf().cursor.y = 0
 	case GoToEOLOp:
 		e.moveCursorToEOL()
 	case NextHalfPageOp:
@@ -184,18 +173,27 @@ func (e *Editor) processEditModeKey() {
 		e.render.moveCursorLeft()
 	case MoveCursorRightOp:
 		e.render.moveCursorRight()
-	case InsertEnterOp:
-		e.getBuf().NewLine()
-	case DeleteChOp:
-		e.getBuf().Delete()
-	case DeleteLineOp:
-		e.getBuf().DeleteLine()
-	case InsertSpaceOp:
-		e.getBuf().Insert(rune(' '))
-	case InsertTabOp:
-		e.getBuf().InsertTab()
-	case InsertChOp:
-		e.getBuf().Insert(e.key.ch)
+	case NextBufferOp:
+		e.nextBuffer()
+	case PrevBufferOp:
+		e.prevBuffer()
+	}
+
+	if !e.getBuf().readOnly {
+		switch e.key.op {
+		case InsertEnterOp:
+			e.getBuf().NewLine()
+		case DeleteChOp:
+			e.getBuf().Delete()
+		case DeleteLineOp:
+			e.getBuf().DeleteLine()
+		case InsertSpaceOp:
+			e.getBuf().Insert(rune(' '))
+		case InsertTabOp:
+			e.getBuf().InsertTab()
+		case InsertChOp:
+			e.getBuf().Insert(e.key.ch)
+		}
 	}
 }
 
@@ -205,69 +203,132 @@ func (e *Editor) moveCursorByMouse(tpos Pos) {
 
 func (e *Editor) moveCursorToEOL() {
 	if len(e.getBuf().lines) == 0 {
-		e.cursor.y = 0
+		e.getBuf().cursor.y = 0
 	}
-	e.cursor.y = len(e.getBuf().lines[e.cursor.x].txt)
+	e.getBuf().cursor.y = len(e.getBuf().lines[e.getBuf().cursor.x].txt)
 }
 
-func (e *Editor) Open(path string) string {
+func (e *Editor) Open(path string, bufIdx int) {
 	fullPath, err := expandHomeDir(path)
 	if err != nil {
-		return fmt.Sprintf("invalid filepath: %s", err)
+		e.msg = fmt.Sprintf("Buffer %d: invalid filepath: %s", e.bufIdx, err)
+		fullPath = ""
 	}
 	if path == "" {
 		fullPath = ""
 	}
-	e.buf = &Buffer{}
-	e.cursor = &Pos{0, 0}
-	state := e.buf.New(e.cursor, fullPath)
-	msg := fmt.Sprintf("Open file %s", e.buf.filePath)
-	if state == NotFound {
-		msg = fmt.Sprintf("Create new file %s", e.buf.filePath)
-	} else if state == HasError {
-		msg = "Fail to open file"
+	if idx := e.hasFileOpened(fullPath); idx >= 0 {
+		e.bufIdx = idx
+		e.msg = fmt.Sprintf("Buffer %d: file %s already opened", e.bufIdx, e.getBuf().filePath)
+	} else {
+		buf := &Buffer{}
+		if bufIdx >= 0 && bufIdx < len(e.bufs) {
+			e.bufs[bufIdx] = buf
+		} else {
+			e.bufs = append(e.bufs, buf)
+			e.bufIdx = len(e.bufs) - 1
+		}
+		state := buf.New(fullPath)
+		e.msg = fmt.Sprintf("Buffer %d: open file %s", e.bufIdx, buf.filePath)
+		if state == NotFound {
+			e.msg = fmt.Sprintf("Buffer %d: create new file %s", e.bufIdx, buf.filePath)
+		} else if state == HasError {
+			e.msg = "Buffer %d: fail to open file"
+		}
 	}
-	e.mode = EditMode
 	e.fileModeToEdit()
-	return msg
 }
 
-func (e *Editor) Save(path string) string {
+func (e *Editor) Save(path string) {
 	fullPath, err := expandHomeDir(path)
 	if err != nil {
-		return fmt.Sprintf("unable to save file: %s", err)
+		e.msg = fmt.Sprintf("unable to save file: %s", err)
 	}
-	wbyte, err := e.getBuf().Save(fullPath)
+	wbyte, err := e.bufs[e.bufIdx].Save(fullPath)
 	if err != nil {
-		return fmt.Sprintf("unable to save file: %s", err)
+		e.msg = fmt.Sprintf("unable to save file: %s", err)
 	}
 	e.mode = EditMode
 	e.fileModeToEdit()
-	return fmt.Sprintf("file saved %d byte written", wbyte)
+	e.msg = fmt.Sprintf("file saved %d byte written", wbyte)
 }
 
 func (e *Editor) fileModeToEdit() {
-	e.render.Init(e.getBuf(), e.cursor)
+	e.render.buf = e.getBuf()
+	e.render.Init()
+	e.mode = EditMode
 }
 
-func (e *Editor) initOpenFileMode() {
-	resetPos(e.miscCursor)
-	e.miscBuf.New(e.miscCursor, "")
-	e.render.Init(e.miscBuf, e.miscCursor)
+func (e *Editor) toOpenFileMode() {
+	e.miscBuf.New("")
+	e.render.Init()
+	e.mode = FileOpenMode
 }
 
-func (e *Editor) initSaveFileMode() {
-	resetPos(e.miscCursor)
-	e.miscBuf.New(e.miscCursor, "")
+func (e *Editor) toSaveFileMode() {
+	e.miscBuf.New("")
 	e.miscBuf.InsertString(e.getBuf().filePath)
-	e.render.Init(e.miscBuf, e.miscCursor)
+	e.render.Init()
+	e.mode = FileSaveMode
+}
+
+func (e *Editor) toHelpPage() {
+	e.getHelpDoc()
 }
 
 func (e *Editor) setExit() {
 	e.isExit = true
 }
 
-// Return the buffer in current render
+// Return the current buffer
 func (e *Editor) getBuf() *Buffer {
 	return e.bufs[e.bufIdx]
+}
+
+func (e *Editor) hasFileOpened(path string) int {
+	for idx, buf := range e.bufs {
+		if buf.filePath == path {
+			return idx
+		}
+	}
+	return -1
+}
+
+func (e *Editor) nextBuffer() {
+	if len(e.bufs) < 1 {
+		return
+	}
+	if e.bufIdx < len(e.bufs)-1 {
+		e.bufIdx++
+	} else {
+		e.bufIdx = 0
+	}
+	e.msg = fmt.Sprintf("Switch to buffer %d", e.bufIdx)
+}
+
+func (e *Editor) prevBuffer() {
+	if len(e.bufs) < 1 {
+		return
+	}
+	if e.bufIdx > 0 {
+		e.bufIdx--
+	} else {
+		e.bufIdx = len(e.bufs) - 1
+	}
+	e.msg = fmt.Sprintf("Switch to buffer %d", e.bufIdx)
+}
+
+func (e *Editor) getHelpDoc() {
+	e.Open(HELP_DOC_PATH, -1)
+	helpBuf := e.getBuf()
+	if helpBuf.isEmpty() {
+		helpBuf.InsertString("CTRL+\\: Exit\tCTRL+X: Exit")
+		helpBuf.NewLine()
+		helpBuf.InsertString("CTRL+R: Open\tCTRL+O: Save")
+		helpBuf.NewLine()
+		helpBuf.NewLine()
+		helpBuf.InsertString("More help doc in https://github.com/ydzhou/pine.git")
+		helpBuf.filePath = "help.txt"
+	}
+	helpBuf.readOnly = true
 }

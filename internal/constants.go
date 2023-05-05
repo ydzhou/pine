@@ -1,17 +1,20 @@
 package pine
 
 const (
-	VERSION  = "0.2.1 alpha"
+	VERSION  = "0.2.2 alpha"
 	TABWIDTH = 8
 )
 
 type Mode int64
 
-const DEFAULT_BUFFERNAME = "untitled"
+const (
+	DEFAULT_BUFFERNAME     = "untitled"
+	DEFAULT_CURR_BUF_INDEX = 1
+	HELP_DOC_PATH          = "/usr/share/doc/pe/help.txt"
+)
 
 const (
 	EditMode Mode = iota
-	HelpMode
 	FileOpenMode
 	FileSaveMode
 	WelcomeMode
@@ -41,6 +44,8 @@ const (
 	OpenFileOp
 	SaveFileOp
 	HelpOp
+	NextBufferOp
+	PrevBufferOp
 	// Navigation Ops
 	MoveCursorUpOp
 	MoveCursorDownOp

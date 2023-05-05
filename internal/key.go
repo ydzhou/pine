@@ -62,6 +62,8 @@ func mapKey(event tm.Event) KeyOps {
 		return InsertSpaceOp
 	case tm.KeyTab:
 		return InsertTabOp
+	case tm.KeyCtrlB:
+		return NextBufferOp
 	default:
 		if runewidth.RuneWidth(event.Ch) > 0 {
 			return InsertChOp

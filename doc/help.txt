@@ -1,0 +1,14 @@
+*Pine Editor Help Doc*
+
+Key mapping
+
+Navigation
+Ctrl-X  Exit or cancel  Ctrl-V  Next page
+Ctrl-/  Help            Ctrl-Z  Prev page
+Ctrl-R  Open file       Ctrl-A  Go to beginning of current line
+Ctrl-O  Save file       Ctrl-E  Go to end of current line
+
+Edit
+Ctrl-K  Delete current line
+
+2020-2023 @ydzhou

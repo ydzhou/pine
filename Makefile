@@ -30,3 +30,9 @@ run:
 
 .PHONY: all
 all: fmt lint import build
+
+install:
+	mv ./pe /usr/local/bin/
+	mkdir -p /usr/share/doc/pe
+	cp ./doc/help.txt /usr/share/doc/pe/
+	echo "Pine editor installed"
