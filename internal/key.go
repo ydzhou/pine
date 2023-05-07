@@ -9,27 +9,51 @@ import (
 
 type KeyMapper struct {
 	op  KeyOps
+	mod tm.Modifier
 	ch  rune
 	key tm.Key
 }
 
 func (k *KeyMapper) Map(event tm.Event) {
-	k.op = mapKey(event)
+	isCmd := false
+	if k.op == CmdOp {
+		isCmd = true
+	}
+	k.op = mapKey(event, isCmd)
+	k.mod = event.Mod
+	k.key = event.Key
 	if k.op != NoOp {
 		k.ch = event.Ch
-		k.key = event.Key
 	}
 }
 
-func mapKey(event tm.Event) KeyOps {
+func mapKey(event tm.Event, isCmd bool) KeyOps {
 	if event.Type != tm.EventKey && event.Type != tm.EventMouse {
 		log.Warnf("detected non key/mouse interaction")
 		return NoOp
 	}
+	if isCmd {
+		switch event.Key {
+		case tm.KeyCtrlX:
+			return ExitOp
+		}
+		switch event.Ch {
+		case rune('k'):
+			return CloseFileOp
+		}
+		return NoOp
+	}
+	if event.Mod == tm.ModAlt {
+		switch event.Ch {
+		case rune(','):
+			return PrevBufferOp
+		case rune('.'):
+			return NextBufferOp
+		}
+	}
 	switch event.Key {
 	case tm.KeyCtrlX:
-		tm.Flush()
-		return ExitOp
+		return CmdOp
 	case tm.KeyCtrlR:
 		return OpenFileOp
 	case tm.KeyCtrlO:
@@ -40,9 +64,9 @@ func mapKey(event tm.Event) KeyOps {
 		return GoToBOLOp
 	case tm.KeyCtrlE:
 		return GoToEOLOp
-	case tm.KeyCtrlV:
+	case tm.KeyCtrlV, tm.KeyPgdn:
 		return NextHalfPageOp
-	case tm.KeyCtrlZ:
+	case tm.KeyCtrlZ, tm.KeyPgup:
 		return PrevHalfPageOp
 	case tm.KeyCtrlK:
 		return DeleteLineOp

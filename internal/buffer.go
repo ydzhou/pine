@@ -81,6 +81,7 @@ func isDirectory(f *os.File) bool {
 }
 
 func (b *Buffer) NewLine() {
+	defer b.setDirty()
 	b.lastModifiedCh = string("newline")
 
 	x := b.cursor.x
@@ -110,10 +111,10 @@ func (b *Buffer) NewLine() {
 
 	b.cursor.x++
 	b.cursor.y = 0
-	b.dirty = true
 }
 
 func (b *Buffer) Insert(data rune) {
+	defer b.setDirty()
 	x := b.cursor.x
 	y := b.cursor.y
 	b.cursor.y++
@@ -135,11 +136,11 @@ func (b *Buffer) Insert(data rune) {
 
 	copy(b.lines[x].txt[y+1:], b.lines[x].txt[y:])
 	b.lines[x].txt[y] = data
-	b.dirty = true
 }
 
 func (b *Buffer) InsertTab() {
 	b.Insert(rune('\t'))
+	b.setDirty()
 }
 
 func (b *Buffer) DeleteLine() {
@@ -152,6 +153,7 @@ func (b *Buffer) DeleteLine() {
 	}
 	b.cursor.y = 0
 	b.lastModifiedCh = "-line"
+	b.setDirty()
 }
 
 func (b *Buffer) Delete() {
@@ -161,6 +163,7 @@ func (b *Buffer) Delete() {
 		b.lastModifiedCh = string("NA")
 		return
 	}
+	defer b.setDirty()
 	// Remove newline
 	if y == 0 {
 		b.cursor.y = len(b.lines[x-1].txt)
@@ -173,7 +176,6 @@ func (b *Buffer) Delete() {
 	b.lastModifiedCh = fmt.Sprintf("-%s", string(b.lines[x].txt[y-1]))
 	b.cursor.y--
 	b.removeRune()
-	b.dirty = true
 }
 
 func (b *Buffer) removeLine() {
@@ -237,4 +239,8 @@ func (b *Buffer) InsertString(s string) {
 
 func (b *Buffer) isEmpty() bool {
 	return len(b.lines) == 0
+}
+
+func (b *Buffer) setDirty() {
+	b.dirty = true
 }

@@ -9,8 +9,12 @@ type Mode int64
 
 const (
 	DEFAULT_BUFFERNAME     = "untitled"
-	DEFAULT_CURR_BUF_INDEX = 1
+	DEFAULT_CURR_BUF_INDEX = 0
 	HELP_DOC_PATH          = "/usr/share/doc/pe/help.txt"
+
+	// Rendering offset for buffer content
+	BUFFER_CONTENT_START_OFFSET = 1
+	BUFFER_CONTENT_END_OFFSET   = 2
 )
 
 const (
@@ -18,6 +22,8 @@ const (
 	FileOpenMode
 	FileSaveMode
 	WelcomeMode
+	ConfirmExitOp
+	ConfirmCloseOp
 )
 
 type FileOpMode int64
@@ -43,6 +49,7 @@ const (
 	ExitOp
 	OpenFileOp
 	SaveFileOp
+	CloseFileOp
 	HelpOp
 	NextBufferOp
 	PrevBufferOp
@@ -66,4 +73,6 @@ const (
 	InsertEnterOp
 	DeleteChOp
 	DeleteLineOp
+	// Misc
+	CmdOp
 )
