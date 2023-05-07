@@ -86,6 +86,11 @@ func (b *Buffer) NewLine() {
 	x := b.cursor.x
 	y := b.cursor.y
 
+	if b.isEmpty() {
+		b.lines = append(b.lines, line{})
+		return
+	}
+
 	if x > len(b.lines)-1 || y > len(b.lines[x].txt) {
 		panic(fmt.Errorf("failed to create new line at (%d,%d)", x, y))
 	}
