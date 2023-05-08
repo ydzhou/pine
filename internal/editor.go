@@ -2,6 +2,7 @@ package pine
 
 import (
 	"fmt"
+	"os"
 
 	log "github.com/sirupsen/logrus"
 
@@ -11,13 +12,13 @@ import (
 type Editor struct {
 	bufIdx  int
 	bufs    []*Buffer
-	render  Render
 	miscBuf *Buffer
+	render  Render
 	mode    Mode
 	sett    *Setting
+	log     *log.Logger
 	key     *KeyMapper
 	isExit  bool
-	msg     string
 }
 
 type Pos struct {
@@ -25,14 +26,35 @@ type Pos struct {
 }
 
 func (e *Editor) Init(sett *Setting) {
+	e.sett = sett
+	e.log = e.initLogger()
 	e.isExit = false
 	e.miscBuf = &Buffer{}
-	e.render = Render{sett: sett}
-	e.render.Init()
-	e.sett = sett
+	e.render.Init(sett, e.log)
 	e.key = &KeyMapper{}
 	e.bufIdx = DEFAULT_CURR_BUF_INDEX
 	e.bufs = []*Buffer{}
+}
+
+func (e *Editor) initLogger() *log.Logger {
+	logger := log.New()
+	logger.Level = log.ErrorLevel
+	if e.sett.IsDebug {
+		logger.Level = log.DebugLevel
+	}
+	logFilepath := "~/.pe.log"
+	logFilepath, err := expandHomeDir(logFilepath)
+	if err != nil {
+		logger.Fatalf("failed to setup logger: %v", err)
+	}
+	f, err := os.OpenFile(logFilepath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
+	if err != nil {
+		logger.SetOutput(os.Stdout)
+		logger.Fatal(err)
+	}
+	logger.SetOutput(f)
+	logger.Info("Logger setup successfully")
+	return logger
 }
 
 func (e *Editor) Start(path string) {
@@ -44,7 +66,7 @@ func (e *Editor) Start(path string) {
 	defer tm.Close()
 
 	e.Open(path, -1)
-	e.render.DrawScreen(e.mode, e.getRenderContent())
+	e.renderAll()
 	for !e.isExit {
 		e.process()
 	}
@@ -60,18 +82,18 @@ func (e *Editor) process() {
 	}
 	e.key.Map(event)
 	if e.mode == ConfirmExitOp {
-		if event.Ch == rune('y') {
+		if event.Key == tm.KeyCtrlX {
 			e.isExit = true
 		}
 		e.mode = EditMode
-		e.msg = "Exit cancelled"
+		e.setMsg("Exit cancelled")
 	} else if e.mode == ConfirmCloseOp {
 		if event.Ch == rune('y') {
 			e.bufs = append(e.bufs[:e.bufIdx], e.bufs[e.bufIdx+1:]...)
 			e.nextBuffer()
 		}
 		e.mode = EditMode
-		e.msg = ""
+		e.setMsg("")
 	} else {
 		switch e.mode {
 		case EditMode:
@@ -81,26 +103,17 @@ func (e *Editor) process() {
 		case FileSaveMode:
 			e.processSaveFileMode(e.getBuf().filePath)
 		default:
-			log.Fatal("unsupported edit mode")
+			e.log.Fatal("unsupported edit mode")
 		}
 	}
-	switch e.mode {
-	case FileOpenMode, FileSaveMode:
-		e.render.buf = e.miscBuf
-	default:
-		e.render.buf = e.getBuf()
-	}
-	e.render.SyncCursorToView()
-	e.render.DrawScreen(e.mode, e.getRenderContent())
-	return
+	e.renderAll()
 }
 
 func (e *Editor) processOpenFileMode() {
-	e.msg = "trying to open file..."
 	switch e.key.op {
 	case ExitOp:
 		e.mode = EditMode
-		e.fileModeToEdit()
+		e.setMsg("Open file cancelled")
 	case DeleteChOp:
 		e.miscBuf.Delete()
 	case InsertEnterOp:
@@ -113,11 +126,10 @@ func (e *Editor) processOpenFileMode() {
 }
 
 func (e *Editor) processSaveFileMode(filepath string) {
-	e.msg = "trying to save file..."
 	switch e.key.op {
 	case ExitOp:
 		e.mode = EditMode
-		e.fileModeToEdit()
+		e.setMsg("Save file cancelled")
 	case DeleteChOp:
 		e.miscBuf.Delete()
 	case InsertEnterOp:
@@ -130,7 +142,7 @@ func (e *Editor) processSaveFileMode(filepath string) {
 }
 
 func (e *Editor) processEditMode(event tm.Event) {
-	e.msg = ""
+	e.setMsg("")
 	if event.Type == tm.EventKey {
 		e.processEditModeKey()
 	} else {
@@ -139,8 +151,6 @@ func (e *Editor) processEditMode(event tm.Event) {
 }
 
 func (e *Editor) processEditModeMouse(event tm.Event) {
-	e.render.mouseCursor.x = event.MouseY
-	e.render.mouseCursor.y = event.MouseX
 	switch event.Key {
 	case tm.MouseLeft:
 		e.getBuf().lastModifiedCh = "+ML"
@@ -149,11 +159,9 @@ func (e *Editor) processEditModeMouse(event tm.Event) {
 			y: event.MouseX,
 		})
 	case tm.MouseWheelUp:
-		e.render.moveCursorUp()
+		e.render.MoveCursor(e.mode, e.getBuf(), MoveCursorUpOp)
 	case tm.MouseWheelDown:
-		e.render.moveCursorDown()
-	default:
-		e.getBuf().lastModifiedCh = "NA"
+		e.render.MoveCursor(e.mode, e.getBuf(), MoveCursorDownOp)
 	}
 }
 
@@ -174,23 +182,17 @@ func (e *Editor) processEditModeKey() {
 	case GoToEOLOp:
 		e.moveCursorToEOL()
 	case NextHalfPageOp:
-		e.render.moveCursorToNextHalfScreen()
+		e.render.bufRender.moveCursorToNextHalfScreen(e.getBuf())
 	case PrevHalfPageOp:
-		e.render.moveCursorToPrevHalfScreen()
-	case MoveCursorUpOp:
-		e.render.moveCursorUp()
-	case MoveCursorDownOp:
-		e.render.moveCursorDown()
-	case MoveCursorLeftOp:
-		e.render.moveCursorLeft()
-	case MoveCursorRightOp:
-		e.render.moveCursorRight()
+		e.render.bufRender.moveCursorToPrevHalfScreen(e.getBuf())
+	case MoveCursorUpOp, MoveCursorDownOp, MoveCursorLeftOp, MoveCursorRightOp:
+		e.render.MoveCursor(e.mode, e.getBuf(), e.key.op)
 	case NextBufferOp:
 		e.nextBuffer()
 	case PrevBufferOp:
 		e.prevBuffer()
 	case CmdOp:
-		e.msg = "Cmd Key ^X Pressed"
+		e.setMsg("Cmd Mod (^X) Triggered")
 	}
 
 	if !e.getBuf().readOnly {
@@ -212,7 +214,7 @@ func (e *Editor) processEditModeKey() {
 }
 
 func (e *Editor) moveCursorByMouse(tpos Pos) {
-	e.render.MoveCursorByMouse(tpos)
+	e.render.MoveCursorByMouse(e.getBuf(), tpos)
 }
 
 func (e *Editor) moveCursorToEOL() {
@@ -228,7 +230,7 @@ func (e *Editor) moveCursorToEOL() {
 func (e *Editor) Open(path string, bufIdx int) {
 	fullPath, err := expandHomeDir(path)
 	if err != nil {
-		e.msg = fmt.Sprintf("Buffer %d: invalid filepath: %s", e.bufIdx, err)
+		e.log.Warnf(fmt.Sprintf("buffer %d: invalid filepath: %s", e.bufIdx, err))
 		fullPath = ""
 	}
 	if path == "" {
@@ -236,7 +238,7 @@ func (e *Editor) Open(path string, bufIdx int) {
 	}
 	if idx := e.hasFileOpened(fullPath); idx >= 0 {
 		e.bufIdx = idx
-		e.msg = fmt.Sprintf("Buffer %d: file %s already opened", e.bufIdx, e.getBuf().filePath)
+		e.log.Infof(fmt.Sprintf("buffer %d: file %s already opened", e.bufIdx, e.getBuf().filePath))
 	} else {
 		buf := &Buffer{}
 		if bufIdx >= 0 && bufIdx < len(e.bufs) {
@@ -245,35 +247,34 @@ func (e *Editor) Open(path string, bufIdx int) {
 			e.bufs = append(e.bufs, buf)
 			e.bufIdx = len(e.bufs) - 1
 		}
-		state := buf.New(fullPath)
-		e.msg = fmt.Sprintf("Buffer %d: open file %s", e.bufIdx, buf.filePath)
-		if state == NotFound {
-			e.msg = fmt.Sprintf("Buffer %d: create new file %s", e.bufIdx, buf.filePath)
-		} else if state == HasError {
-			e.msg = "Buffer %d: fail to open file"
+		state := buf.New(fullPath, e.log)
+		if state != Success {
+			e.log.Warnf(fmt.Sprintf("buffer %d: fail to open file, %s with state %d", e.bufIdx, e.getBuf().filePath, state))
 		}
 	}
-	e.fileModeToEdit()
+	e.mode = EditMode
+	e.setMsg(fmt.Sprintf("buffer %d: opened %s", e.bufIdx, e.getBuf().filePath))
 }
 
 // Save current buffer to the given filepath
 func (e *Editor) Save(path string) {
 	fullPath, err := expandHomeDir(path)
 	if err != nil {
-		e.msg = fmt.Sprintf("unable to save file: %s", err)
+		log.Errorf("unable to save file %s: %v", path, err)
+		e.setMsg(fmt.Sprintf("Unable to save file: %s", err))
 	}
 	wbyte, err := e.bufs[e.bufIdx].Save(fullPath)
 	if err != nil {
-		e.msg = fmt.Sprintf("unable to save file: %s", err)
+		log.Errorf("Unable to save file %s: %v", path, err)
+		e.setMsg(fmt.Sprintf("Unable to save file: %s", err))
 	}
 	e.mode = EditMode
-	e.fileModeToEdit()
-	e.msg = fmt.Sprintf("file saved %d byte written", wbyte)
+	e.setMsg(fmt.Sprintf("File saved %d byte written", wbyte))
 }
 
 // Close current buffer
 func (e *Editor) Close() {
-	e.msg = fmt.Sprintf("Closed buffer %s", e.getBuf().filePath)
+	e.setMsg(fmt.Sprintf("Closed buffer %s", e.getBuf().filePath))
 	// If this is the last buffer, exit the editor
 	if len(e.bufs) < 2 {
 		e.Exit()
@@ -281,7 +282,7 @@ func (e *Editor) Close() {
 	}
 	// Golang automatically handle the case where bufIdx is at the last one.
 	if e.getBuf().dirty && !e.getBuf().readOnly {
-		e.msg = fmt.Sprintf("Unsaved changes at Buffer %d, Exit? (y) or (n)", e.bufIdx)
+		e.setMsg(fmt.Sprintf("Unsaved changes at Buffer %d, press ^X to exit anyway", e.bufIdx))
 		e.mode = ConfirmCloseOp
 	} else {
 		e.bufs = append(e.bufs[:e.bufIdx], e.bufs[e.bufIdx+1:]...)
@@ -298,33 +299,29 @@ func (e *Editor) Exit() {
 		}
 	}
 	if len(modifiedBufIdx) > 0 {
-		e.msg = fmt.Sprintf("Unsaved changes at Buffer")
+		msg := "Unsaved changes at Buffer"
 		for _, bufIdx := range modifiedBufIdx {
-			e.msg = e.msg + fmt.Sprintf(" %d,", bufIdx)
+			msg = msg + fmt.Sprintf(" %d,", bufIdx)
 		}
-		e.msg = e.msg + " Exit? (y) or (n)"
+		msg = msg + " press ^X to exit anyway"
+		e.setMsg(msg)
 		e.mode = ConfirmExitOp
 	} else {
 		e.isExit = true
 	}
 }
 
-func (e *Editor) fileModeToEdit() {
-	e.render.buf = e.getBuf()
-	e.render.Init()
-	e.mode = EditMode
-}
-
 func (e *Editor) toOpenFileMode() {
-	e.miscBuf.New("")
-	e.render.Init()
+	e.miscBuf.New("", e.log)
+	e.miscBuf.InsertString(e.getBuf().filePath)
+	e.render.miscBufRender.Reset()
 	e.mode = FileOpenMode
 }
 
 func (e *Editor) toSaveFileMode() {
-	e.miscBuf.New("")
+	e.miscBuf.New("", e.log)
 	e.miscBuf.InsertString(e.getBuf().filePath)
-	e.render.Init()
+	e.render.miscBufRender.Reset()
 	e.mode = FileSaveMode
 }
 
@@ -352,7 +349,7 @@ func (e *Editor) nextBuffer() {
 	} else {
 		e.bufIdx = 0
 	}
-	e.msg = fmt.Sprintf("Switch to buffer %d", e.bufIdx)
+	e.setMsg(fmt.Sprintf("Switch to buffer %d", e.bufIdx))
 }
 
 func (e *Editor) prevBuffer() {
@@ -361,7 +358,7 @@ func (e *Editor) prevBuffer() {
 	} else {
 		e.bufIdx = len(e.bufs) - 1
 	}
-	e.msg = fmt.Sprintf("Switch to buffer %d", e.bufIdx)
+	e.setMsg(fmt.Sprintf("Switch to buffer %d", e.bufIdx))
 }
 
 func (e *Editor) getHelpDoc() {
@@ -381,11 +378,22 @@ func (e *Editor) getHelpDoc() {
 
 func (e *Editor) getRenderContent() RenderContent {
 	return RenderContent{
+		buf:      e.getBuf(),
+		miscBuf:  e.miscBuf,
+		mode:     e.mode,
 		mod:      e.key.mod,
 		key:      e.key.key,
 		ch:       e.key.ch,
 		bufIdx:   e.bufIdx,
 		bufDirty: e.getBuf().dirty,
-		msg:      e.msg,
 	}
+}
+
+func (e *Editor) renderAll() {
+	e.render.Draw(e.getRenderContent())
+}
+
+func (e *Editor) setMsg(msg string) {
+	e.miscBuf.New("", e.log)
+	e.miscBuf.InsertString(msg)
 }

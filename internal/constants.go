@@ -1,7 +1,7 @@
 package pine
 
 const (
-	VERSION  = "0.2.2 alpha"
+	VERSION  = "0.2.3 alpha"
 	TABWIDTH = 8
 )
 

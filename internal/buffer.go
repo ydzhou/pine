@@ -15,14 +15,15 @@ type Buffer struct {
 	cursor         *Pos
 	filePath       string
 	readOnly       bool
+	log            *log.Logger
 }
 
 type line struct {
 	txt []rune
 }
 
-func (b *Buffer) New(path string) FileOpenState {
-	b.init()
+func (b *Buffer) New(path string, log *log.Logger) FileOpenState {
+	b.init(log)
 	b.filePath = path
 	b.newEmptyBuffer()
 	if path != "" {
@@ -31,7 +32,8 @@ func (b *Buffer) New(path string) FileOpenState {
 	return Success
 }
 
-func (b *Buffer) init() {
+func (b *Buffer) init(log *log.Logger) {
+	b.log = log
 	b.cursor = &Pos{x: 0, y: 0}
 	b.lines = []line{}
 	b.lastModifiedCh = "NA"
@@ -51,11 +53,12 @@ func (b *Buffer) openFile(path string) FileOpenState {
 			b.filePath = path
 			return NotFound
 		}
-		log.Warnf("fail to open file %s", path)
+		b.log.Errorf("fail to open %s: %v", path, err)
 		return HasError
 	}
 	// TODO: implement function to properly handle directory reading
 	if isDirectory(f) {
+		b.log.Infof("file path %s is a directory. not supported", path)
 		return HasError
 	}
 
@@ -71,7 +74,6 @@ func (b *Buffer) openFile(path string) FileOpenState {
 func isDirectory(f *os.File) bool {
 	stat, err := f.Stat()
 	if err != nil {
-		log.Warnf("File stat failure: %s", f.Name())
 		return false
 	}
 	if stat.IsDir() {

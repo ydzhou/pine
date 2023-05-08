@@ -15,7 +15,7 @@ It has a very simple and retro editing style, yet I add few modern features to s
 ## Roadmap
 
 - [x] Mouse support for scrolling and moving the cursor
-- [ ] Multiple buffers
+- [x] Multiple buffers
 - [ ] Wrap the line
 - [ ] Auto indention
 - [ ] Copy and paste within the editor
