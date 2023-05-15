@@ -98,7 +98,9 @@ func (b *Buffer) NewLine() {
 		panic(fmt.Errorf("failed to create new line at (%d,%d)", x, y))
 	}
 
-	line := line{}
+	indention := getIndention(b.lines[x].txt)
+
+	line := line{txt: []rune{}}
 	if y <= len(b.lines[x].txt) {
 		line.txt = make([]rune, len(b.lines[x].txt[:y]))
 		copy(line.txt, b.lines[x].txt[:y])
@@ -113,6 +115,8 @@ func (b *Buffer) NewLine() {
 
 	b.cursor.x++
 	b.cursor.y = 0
+
+	b.applyIndention(b.cursor.x, indention)
 }
 
 func (b *Buffer) Insert(data rune) {
@@ -245,4 +249,22 @@ func (b *Buffer) isEmpty() bool {
 
 func (b *Buffer) setDirty() {
 	b.dirty = true
+}
+
+func (b *Buffer) applyIndention(idx int, indention []rune) {
+	curr := b.lines[idx].txt
+	existIndention := getIndention(curr)
+	b.lines[idx].txt = append(indention[:(len(indention)-len(existIndention))], b.lines[idx].txt...)
+	b.cursor.y += len(indention)
+}
+
+func getIndention(runes []rune) []rune {
+	count := 0
+	for _, r := range runes {
+		if r != rune(' ') && r != rune('\t') {
+			break
+		}
+		count++
+	}
+	return runes[:count]
 }
