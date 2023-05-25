@@ -1,6 +1,8 @@
 package pine
 
 import (
+	"fmt"
+
 	"github.com/mattn/go-runewidth"
 	tm "github.com/nsf/termbox-go"
 )
@@ -83,6 +85,14 @@ func offsetView(viewCursor, viewAnchor, viewStartPos, viewEndPos *Pos) {
 	if viewCursor.y > viewAnchor.y+w-1 {
 		viewAnchor.y = viewCursor.y - w + 1
 	}
+}
+
+func unsavedBufferMsg(bufIdxs []int) string {
+	msg := "Unsaved changes at Buffer "
+	for _, idx := range bufIdxs {
+		msg += fmt.Sprintf("%d, ", idx)
+	}
+	return msg + "press ^X to discard"
 }
 
 // y width, x height

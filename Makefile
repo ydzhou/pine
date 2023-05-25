@@ -33,6 +33,6 @@ all: fmt lint import build
 
 install:
 	mv ./pe /usr/local/bin/
-	mkdir -p /usr/share/doc/pe
-	cp ./doc/help.txt /usr/share/doc/pe/
+	mkdir -p /usr/local/share/doc/pe
+	cp ./doc/help.txt /usr/local/share/doc/pe/
 	echo "Pine editor installed"

@@ -64,6 +64,9 @@ End   Misc Buffer
 func (r *Render) updateViewPos(mode Mode) {
 	r.termW, r.termH = tm.Size()
 	r.bufRender.viewStartPos = &Pos{1, 0}
+	if mode == DirMode {
+		r.bufRender.viewStartPos = &Pos{2, 0}
+	}
 	r.bufRender.viewEndPos = &Pos{r.termH - 2, r.termW}
 	offset := 0
 	if mode == FileOpenMode {
@@ -93,6 +96,10 @@ func (r *Render) Draw(content RenderContent) {
 	}
 
 	r.drawHeadline(content)
+
+	if content.mode == DirMode {
+		r.drawDir(content.buf.filePath)
+	}
 
 	miscMode := false
 	if content.mode == FileOpenMode || content.mode == FileSaveMode {
@@ -166,6 +173,10 @@ func (r *Render) drawMiscInfo(mode Mode) {
 		info = FileSaveInfo
 	}
 	tbprint(r.miscBufRender.viewStartPos.x, 0, tm.ColorCyan, tm.ColorDefault, info)
+}
+
+func (r *Render) drawDir(path string) {
+	tbprint(1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("Files under %s", path))
 }
 
 func (r *BufRender) Reset() {

@@ -14,6 +14,7 @@ type Buffer struct {
 	lastModifiedCh string
 	cursor         *Pos
 	filePath       string
+	isDir          bool
 	readOnly       bool
 	log            *log.Logger
 }
@@ -58,8 +59,11 @@ func (b *Buffer) openFile(path string) FileOpenState {
 	}
 	// TODO: implement function to properly handle directory reading
 	if isDirectory(f) {
-		b.log.Infof("file path %s is a directory. not supported", path)
-		return HasError
+		if err = b.openDir(path); err != nil {
+			b.log.Errorf("fail to list directory %s: %v", path, err)
+			return HasError
+		}
+		return IsDir
 	}
 
 	defer f.Close()
@@ -80,6 +84,36 @@ func isDirectory(f *os.File) bool {
 		return true
 	}
 	return false
+}
+
+func (b *Buffer) openDir(path string) error {
+	fs, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	b.lines = []line{
+		{txt: []rune(".")},
+		{txt: []rune("..")},
+	}
+	for _, f := range fs {
+		name := f.Name()
+		if f.IsDir() {
+			name = f.Name() + "/"
+		}
+		b.lines = append(b.lines, line{txt: []rune(name)})
+	}
+	b.isDir = true
+	b.readOnly = true
+	b.filePath = path
+	return nil
+}
+
+func (b *Buffer) getCurrDirPath() string {
+	if !b.isDir {
+		log.Errorf("Cannot get directory in non directory buffer %s", b.filePath)
+		return ""
+	}
+	return string(b.filePath) + "/" + string(b.lines[b.cursor.x].txt)
 }
 
 func (b *Buffer) NewLine() {
@@ -254,7 +288,9 @@ func (b *Buffer) setDirty() {
 func (b *Buffer) applyIndention(idx int, indention []rune) {
 	curr := b.lines[idx].txt
 	existIndention := getIndention(curr)
-	b.lines[idx].txt = append(indention[:(len(indention)-len(existIndention))], b.lines[idx].txt...)
+	if len(indention) > len(existIndention) {
+		b.lines[idx].txt = append(indention[:(len(indention)-len(existIndention))], b.lines[idx].txt...)
+	}
 	b.cursor.y += len(indention)
 }
 

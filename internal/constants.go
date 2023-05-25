@@ -1,7 +1,7 @@
 package pine
 
 const (
-	VERSION  = "0.2.4 alpha"
+	VERSION  = "0.2.5 alpha"
 	TABWIDTH = 4
 )
 
@@ -10,7 +10,7 @@ type Mode int64
 const (
 	DEFAULT_BUFFERNAME     = "untitled"
 	DEFAULT_CURR_BUF_INDEX = 0
-	HELP_DOC_PATH          = "/usr/share/doc/pe/help.txt"
+	HELP_DOC_PATH          = "/usr/local/share/doc/pe/help.txt"
 
 	// Rendering offset for buffer content
 	BUFFER_CONTENT_START_OFFSET = 1
@@ -21,7 +21,7 @@ const (
 	EditMode Mode = iota
 	FileOpenMode
 	FileSaveMode
-	WelcomeMode
+	DirMode
 	ConfirmExitOp
 	ConfirmCloseOp
 )
@@ -37,6 +37,7 @@ type FileOpenState int64
 
 const (
 	Success FileOpenState = iota
+	IsDir
 	HasError
 	NotFound
 )

@@ -84,6 +84,7 @@ func (e *Editor) process() {
 	if e.mode == ConfirmExitOp {
 		if event.Key == tm.KeyCtrlX {
 			e.isExit = true
+			return
 		}
 		e.mode = EditMode
 		e.setMsg("Exit cancelled")
@@ -95,6 +96,7 @@ func (e *Editor) process() {
 		e.mode = EditMode
 		e.setMsg("")
 	} else {
+		e.identifyFileMode()
 		switch e.mode {
 		case EditMode:
 			e.processEditMode(event)
@@ -102,11 +104,29 @@ func (e *Editor) process() {
 			e.processOpenFileMode()
 		case FileSaveMode:
 			e.processSaveFileMode(e.getBuf().filePath)
+		case DirMode:
+			e.processDirMode()
 		default:
 			e.log.Fatal("unsupported edit mode")
 		}
 	}
+	if len(e.bufs) < 1 {
+		e.isExit = true
+		return
+	}
+	e.identifyFileMode()
 	e.renderAll()
+}
+
+func (e *Editor) identifyFileMode() {
+	if e.isExit || (e.mode != EditMode && e.mode != DirMode) {
+		return
+	}
+	if e.getBuf().isDir {
+		e.mode = DirMode
+	} else {
+		e.mode = EditMode
+	}
 }
 
 func (e *Editor) processOpenFileMode() {
@@ -141,6 +161,37 @@ func (e *Editor) processSaveFileMode(filepath string) {
 	}
 }
 
+func (e *Editor) processDirMode() {
+	switch e.key.op {
+	case ExitOp:
+		e.Exit()
+	case OpenFileOp:
+		e.toOpenFileMode()
+	case CloseFileOp:
+		e.Close()
+	case HelpOp:
+		e.toHelpPage()
+	case NextHalfPageOp:
+		e.render.bufRender.moveCursorToNextHalfScreen(e.getBuf())
+	case PrevHalfPageOp:
+		e.render.bufRender.moveCursorToPrevHalfScreen(e.getBuf())
+	case MoveCursorUpOp, MoveCursorDownOp, MoveCursorLeftOp, MoveCursorRightOp:
+		e.render.MoveCursor(e.mode, e.getBuf(), e.key.op)
+	case NextBufferOp:
+		e.nextBuffer()
+	case PrevBufferOp:
+		e.prevBuffer()
+	case InsertEnterOp:
+		e.openDir(e.bufIdx)
+	}
+	switch e.key.ch {
+	case 't':
+		e.openDir(-1)
+	case 'q':
+		e.Close()
+	}
+}
+
 func (e *Editor) processEditMode(event tm.Event) {
 	e.setMsg("")
 	if event.Type == tm.EventKey {
@@ -166,6 +217,22 @@ func (e *Editor) processEditModeMouse(event tm.Event) {
 }
 
 func (e *Editor) processEditModeKey() {
+	if !e.getBuf().readOnly {
+		switch e.key.op {
+		case InsertEnterOp:
+			e.getBuf().NewLine()
+		case DeleteChOp:
+			e.getBuf().Delete()
+		case DeleteLineOp:
+			e.getBuf().DeleteLine()
+		case InsertSpaceOp:
+			e.getBuf().Insert(rune(' '))
+		case InsertTabOp:
+			e.getBuf().InsertTab()
+		case InsertChOp:
+			e.getBuf().Insert(e.key.ch)
+		}
+	}
 	switch e.key.op {
 	case ExitOp:
 		e.Exit()
@@ -193,23 +260,6 @@ func (e *Editor) processEditModeKey() {
 		e.prevBuffer()
 	case CmdOp:
 		e.setMsg("Cmd Mod (^X) Triggered")
-	}
-
-	if !e.getBuf().readOnly {
-		switch e.key.op {
-		case InsertEnterOp:
-			e.getBuf().NewLine()
-		case DeleteChOp:
-			e.getBuf().Delete()
-		case DeleteLineOp:
-			e.getBuf().DeleteLine()
-		case InsertSpaceOp:
-			e.getBuf().Insert(rune(' '))
-		case InsertTabOp:
-			e.getBuf().InsertTab()
-		case InsertChOp:
-			e.getBuf().Insert(e.key.ch)
-		}
 	}
 }
 
@@ -251,8 +301,12 @@ func (e *Editor) Open(path string, bufIdx int) {
 		if state != Success {
 			e.log.Warnf(fmt.Sprintf("buffer %d: fail to open file, %s with state %d", e.bufIdx, e.getBuf().filePath, state))
 		}
+		if state == IsDir {
+			e.mode = DirMode
+		} else {
+			e.mode = EditMode
+		}
 	}
-	e.mode = EditMode
 	e.setMsg(fmt.Sprintf("buffer %d: opened %s", e.bufIdx, e.getBuf().filePath))
 }
 
@@ -274,41 +328,31 @@ func (e *Editor) Save(path string) {
 
 // Close current buffer
 func (e *Editor) Close() {
-	e.setMsg(fmt.Sprintf("Closed buffer %s", e.getBuf().filePath))
-	// If this is the last buffer, exit the editor
-	if len(e.bufs) < 2 {
-		e.Exit()
+	idx := e.bufIdx
+	if !e.getBuf().readOnly && e.getBuf().dirty {
+		e.setMsg(unsavedBufferMsg([]int{idx}))
+		e.mode = ConfirmCloseOp
 		return
 	}
-	// Golang automatically handle the case where bufIdx is at the last one.
-	if e.getBuf().dirty && !e.getBuf().readOnly {
-		e.setMsg(fmt.Sprintf("Unsaved changes at Buffer %d, press ^X to exit anyway", e.bufIdx))
-		e.mode = ConfirmCloseOp
-	} else {
-		e.bufs = append(e.bufs[:e.bufIdx], e.bufs[e.bufIdx+1:]...)
-		e.nextBuffer()
-	}
+	e.bufs = append(e.bufs[:idx], e.bufs[idx+1:]...)
+	e.nextBuffer()
 }
 
 // Exit the editor
 func (e *Editor) Exit() {
-	modifiedBufIdx := []int{}
+	unsavedBufIdxs := []int{}
 	for i, buf := range e.bufs {
-		if buf.dirty && !buf.readOnly {
-			modifiedBufIdx = append(modifiedBufIdx, i)
+		if buf.readOnly || !buf.dirty {
+			continue
 		}
+		unsavedBufIdxs = append(unsavedBufIdxs, i)
 	}
-	if len(modifiedBufIdx) > 0 {
-		msg := "Unsaved changes at Buffer"
-		for _, bufIdx := range modifiedBufIdx {
-			msg = msg + fmt.Sprintf(" %d,", bufIdx)
-		}
-		msg = msg + " press ^X to exit anyway"
-		e.setMsg(msg)
+	if len(unsavedBufIdxs) > 0 {
+		e.setMsg(unsavedBufferMsg(unsavedBufIdxs))
 		e.mode = ConfirmExitOp
-	} else {
-		e.isExit = true
+		return
 	}
+	e.isExit = true
 }
 
 func (e *Editor) toOpenFileMode() {
@@ -396,4 +440,9 @@ func (e *Editor) renderAll() {
 func (e *Editor) setMsg(msg string) {
 	e.miscBuf.New("", e.log)
 	e.miscBuf.InsertString(msg)
+}
+
+func (e *Editor) openDir(idx int) {
+	path := e.getBuf().getCurrDirPath()
+	e.Open(path, idx)
 }
