@@ -11,10 +11,12 @@ const (
 	DEFAULT_BUFFERNAME     = "untitled"
 	DEFAULT_CURR_BUF_INDEX = 0
 	HELP_DOC_PATH          = "/usr/local/share/doc/pe/help.txt"
+)
 
-	// Rendering offset for buffer content
-	BUFFER_CONTENT_START_OFFSET = 1
-	BUFFER_CONTENT_END_OFFSET   = 2
+// UI
+const (
+	HEADLINE_OFFSET   = 0
+	STATUSLINE_OFFSET = -1
 )
 
 const (

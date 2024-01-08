@@ -102,3 +102,8 @@ func tbprint(x, y int, fg, bg tm.Attribute, msg string) {
 		y += runewidth.RuneWidth(c)
 	}
 }
+
+// Check if given coordinate is on the target area
+func isOnArea(p Pos, startPos Pos, endPos Pos) bool {
+	return p.x >= startPos.x && p.y >= startPos.y && p.x < endPos.x && p.y < endPos.y
+}

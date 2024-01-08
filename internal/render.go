@@ -9,10 +9,8 @@ import (
 )
 
 const (
-	HeaderlineOffset = 0
-	StatuslineOffset = -1
-	FileOpenInfo     = "Open file (^X ^X to cancel): "
-	FileSaveInfo     = "Save file (^X ^X to cancel): "
+	FileOpenInfo = "Open file (^X ^X to cancel): "
+	FileSaveInfo = "Save file (^X ^X to cancel): "
 )
 
 type Render struct {
@@ -143,18 +141,18 @@ func (r *Render) drawHeadline(content RenderContent) {
 	for i := 0; i < r.termW; i++ {
 		tm.SetCell(i, 0, rune(' '), tm.ColorBlack, tm.ColorWhite)
 	}
-	tbprint(0, 0, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf("Pine Editor v%s", VERSION))
+	tbprint(HEADLINE_OFFSET, 0, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf("Pine Editor v%s", VERSION))
 	bufId := strconv.Itoa(content.bufIdx)
 	bufDirtyMark := " "
 	if content.buf.dirty {
 		bufDirtyMark = "*"
 	}
 	bufName := getFilename(content.buf.filePath)
-	tbprint(0, r.termW-len(bufName)-len(bufId)-3, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf("%s%s: %s", bufDirtyMark, bufId, bufName))
+	tbprint(HEADLINE_OFFSET, r.termW-len(bufName)-len(bufId)-3, tm.ColorBlack, tm.ColorWhite, fmt.Sprintf("%s%s: %s", bufDirtyMark, bufId, bufName))
 }
 
 func (r *Render) drawStatusline(content RenderContent) {
-	x := r.termH - 1 + StatuslineOffset
+	x := r.termH - 1 + STATUSLINE_OFFSET
 	for i := 0; i < r.termW; i++ {
 		tm.SetCell(i, x, rune(' '), tm.ColorCyan, tm.ColorCyan)
 	}
@@ -177,6 +175,12 @@ func (r *Render) drawMiscInfo(mode Mode) {
 
 func (r *Render) drawDir(path string) {
 	tbprint(1, 0, tm.ColorDefault, tm.ColorDefault, fmt.Sprintf("Files under %s", path))
+}
+
+func (r *Render) getBufNamePos(filePath string, bufIdx int) (Pos, Pos) {
+	bufName := getFilename(filePath)
+	bufId := strconv.Itoa(bufIdx)
+	return Pos{HEADLINE_OFFSET, r.termW - len(bufName) - len(bufId) - 3}, Pos{HEADLINE_OFFSET + 1, r.termW}
 }
 
 func (r *BufRender) Reset() {

@@ -202,6 +202,9 @@ func (e *Editor) processEditMode(event tm.Event) {
 }
 
 func (e *Editor) processEditModeMouse(event tm.Event) {
+	if e.processEditMouseBuffer(event) {
+		return
+	}
 	switch event.Key {
 	case tm.MouseLeft:
 		e.getBuf().lastModifiedCh = "+ML"
@@ -214,6 +217,24 @@ func (e *Editor) processEditModeMouse(event tm.Event) {
 	case tm.MouseWheelDown:
 		e.render.MoveCursor(e.mode, e.getBuf(), MoveCursorDownOp)
 	}
+}
+
+func (e *Editor) processEditMouseBuffer(event tm.Event) bool {
+	bufStartPos, bufEndPos := e.render.getBufNamePos(e.getBuf().filePath, e.bufIdx)
+	if !isOnArea(Pos{event.MouseY, event.MouseX}, bufStartPos, bufEndPos) {
+		return false
+	}
+	switch event.Key {
+	case tm.MouseLeft:
+		e.nextBuffer()
+	case tm.MouseWheelDown:
+		e.nextBuffer()
+	case tm.MouseWheelUp:
+		e.prevBuffer()
+	case tm.MouseRight:
+		e.Close()
+	}
+	return true
 }
 
 func (e *Editor) processEditModeKey() {
