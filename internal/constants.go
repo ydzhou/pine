@@ -15,8 +15,11 @@ const (
 
 // UI
 const (
-	HEADLINE_OFFSET   = 0
-	STATUSLINE_OFFSET = -1
+	HEADLINE_OFFSET                 = 0
+	STATUSLINE_OFFSET               = -1
+	BUFFER_CONTENT_START_OFFSET     = 1
+	BUFFER_DIR_CONTENT_START_OFFSET = 2
+	BUFFER_END_OFFSET               = -2
 )
 
 const (

@@ -105,7 +105,7 @@ func (e *Editor) process() {
 		case FileSaveMode:
 			e.processSaveFileMode(e.getBuf().filePath)
 		case DirMode:
-			e.processDirMode()
+			e.processDirMode(event)
 		default:
 			e.log.Fatal("unsupported edit mode")
 		}
@@ -161,7 +161,64 @@ func (e *Editor) processSaveFileMode(filepath string) {
 	}
 }
 
-func (e *Editor) processDirMode() {
+func (e *Editor) processDirMode(event tm.Event) {
+	if event.Type == tm.EventKey {
+		switch e.key.op {
+		case InsertEnterOp:
+			e.openDir(e.bufIdx)
+		}
+		switch e.key.ch {
+		case 'a':
+			e.openDir(-1)
+		}
+		e.processCommonKey()
+		return
+	}
+	e.processCommonMouse(event)
+	switch event.Key {
+	case tm.MouseLeft:
+		e.openDir(e.bufIdx)
+	}
+}
+
+func (e *Editor) processEditMode(event tm.Event) {
+	e.setMsg("")
+	if event.Type == tm.EventKey {
+		e.processEditModeKey()
+		return
+	}
+	e.processEditModeMouse(event)
+}
+
+func (e *Editor) processEditModeMouse(event tm.Event) {
+	e.processCommonMouse(event)
+}
+
+func (e *Editor) processEditModeKey() {
+	if !e.getBuf().readOnly {
+		switch e.key.op {
+		case InsertEnterOp:
+			e.getBuf().NewLine()
+		case DeleteChOp:
+			e.getBuf().Delete()
+		case DeleteLineOp:
+			e.getBuf().DeleteLine()
+		case InsertSpaceOp:
+			e.getBuf().Insert(rune(' '))
+		case InsertTabOp:
+			e.getBuf().InsertTab()
+		case InsertChOp:
+			e.getBuf().Insert(e.key.ch)
+		}
+	}
+	switch e.key.op {
+	case SaveFileOp:
+		e.toSaveFileMode()
+	}
+	e.processCommonKey()
+}
+
+func (e *Editor) processCommonKey() {
 	switch e.key.op {
 	case ExitOp:
 		e.Exit()
@@ -171,6 +228,10 @@ func (e *Editor) processDirMode() {
 		e.Close()
 	case HelpOp:
 		e.toHelpPage()
+	case GoToBOLOp:
+		e.getBuf().cursor.y = 0
+	case GoToEOLOp:
+		e.moveCursorToEOL()
 	case NextHalfPageOp:
 		e.render.bufRender.moveCursorToNextHalfScreen(e.getBuf())
 	case PrevHalfPageOp:
@@ -181,27 +242,12 @@ func (e *Editor) processDirMode() {
 		e.nextBuffer()
 	case PrevBufferOp:
 		e.prevBuffer()
-	case InsertEnterOp:
-		e.openDir(e.bufIdx)
-	}
-	switch e.key.ch {
-	case 't':
-		e.openDir(-1)
-	case 'q':
-		e.Close()
+	case CmdOp:
+		e.setMsg("Cmd Mod (^X) Triggered")
 	}
 }
 
-func (e *Editor) processEditMode(event tm.Event) {
-	e.setMsg("")
-	if event.Type == tm.EventKey {
-		e.processEditModeKey()
-	} else {
-		e.processEditModeMouse(event)
-	}
-}
-
-func (e *Editor) processEditModeMouse(event tm.Event) {
+func (e *Editor) processCommonMouse(event tm.Event) {
 	if e.processEditMouseBuffer(event) {
 		return
 	}
@@ -209,7 +255,7 @@ func (e *Editor) processEditModeMouse(event tm.Event) {
 	case tm.MouseLeft:
 		e.getBuf().lastModifiedCh = "+ML"
 		e.moveCursorByMouse(Pos{
-			x: event.MouseY - 1,
+			x: event.MouseY,
 			y: event.MouseX,
 		})
 	case tm.MouseWheelUp:
@@ -237,55 +283,8 @@ func (e *Editor) processEditMouseBuffer(event tm.Event) bool {
 	return true
 }
 
-func (e *Editor) processEditModeKey() {
-	if !e.getBuf().readOnly {
-		switch e.key.op {
-		case InsertEnterOp:
-			e.getBuf().NewLine()
-		case DeleteChOp:
-			e.getBuf().Delete()
-		case DeleteLineOp:
-			e.getBuf().DeleteLine()
-		case InsertSpaceOp:
-			e.getBuf().Insert(rune(' '))
-		case InsertTabOp:
-			e.getBuf().InsertTab()
-		case InsertChOp:
-			e.getBuf().Insert(e.key.ch)
-		}
-	}
-	switch e.key.op {
-	case ExitOp:
-		e.Exit()
-	case OpenFileOp:
-		e.toOpenFileMode()
-	case SaveFileOp:
-		e.toSaveFileMode()
-	case CloseFileOp:
-		e.Close()
-	case HelpOp:
-		e.toHelpPage()
-	case GoToBOLOp:
-		e.getBuf().cursor.y = 0
-	case GoToEOLOp:
-		e.moveCursorToEOL()
-	case NextHalfPageOp:
-		e.render.bufRender.moveCursorToNextHalfScreen(e.getBuf())
-	case PrevHalfPageOp:
-		e.render.bufRender.moveCursorToPrevHalfScreen(e.getBuf())
-	case MoveCursorUpOp, MoveCursorDownOp, MoveCursorLeftOp, MoveCursorRightOp:
-		e.render.MoveCursor(e.mode, e.getBuf(), e.key.op)
-	case NextBufferOp:
-		e.nextBuffer()
-	case PrevBufferOp:
-		e.prevBuffer()
-	case CmdOp:
-		e.setMsg("Cmd Mod (^X) Triggered")
-	}
-}
-
 func (e *Editor) moveCursorByMouse(tpos Pos) {
-	e.render.MoveCursorByMouse(e.getBuf(), tpos)
+	e.render.MoveCursorByMouse(e.getBuf(), tpos, e.mode)
 }
 
 func (e *Editor) moveCursorToEOL() {
@@ -430,7 +429,7 @@ func (e *Editor) getHelpDoc() {
 	e.Open(HELP_DOC_PATH, -1)
 	helpBuf := e.getBuf()
 	if helpBuf.isEmpty() {
-		helpBuf.InsertString("CTRL+\\: Exit\tCTRL+X: Exit")
+		helpBuf.InsertString("CTRL+X CTRL+X: Exit")
 		helpBuf.NewLine()
 		helpBuf.InsertString("CTRL+R: Open\tCTRL+O: Save")
 		helpBuf.NewLine()

@@ -19,6 +19,7 @@ type Render struct {
 	miscBufRender *BufRender // miscBufRender renders content of the buffer for misc usage, e.g. open/save files
 	sett          *Setting
 	log           *log.Logger
+	event         tm.Event
 }
 
 type RenderContent struct {
@@ -33,6 +34,9 @@ type RenderContent struct {
 }
 
 // BufRender renders content of a buffer
+// ViewStartPos and ViewEndPos are the absolute coordinate of the view on terminal screen
+// ViewCursor is the absolute coordinate of the cusor
+// ViewAnchor is the coordinate of buffer content, used to calculate content outside of the screen
 type BufRender struct {
 	viewStartPos *Pos
 	viewEndPos   *Pos
@@ -61,11 +65,11 @@ End   Misc Buffer
 */
 func (r *Render) updateViewPos(mode Mode) {
 	r.termW, r.termH = tm.Size()
-	r.bufRender.viewStartPos = &Pos{1, 0}
+	r.bufRender.viewStartPos = &Pos{BUFFER_CONTENT_START_OFFSET, 0}
 	if mode == DirMode {
-		r.bufRender.viewStartPos = &Pos{2, 0}
+		r.bufRender.viewStartPos = &Pos{BUFFER_DIR_CONTENT_START_OFFSET, 0}
 	}
-	r.bufRender.viewEndPos = &Pos{r.termH - 2, r.termW}
+	r.bufRender.viewEndPos = &Pos{r.termH + BUFFER_END_OFFSET, r.termW}
 	offset := 0
 	if mode == FileOpenMode {
 		offset = len(FileOpenInfo)
@@ -133,8 +137,8 @@ func (r *Render) MoveCursor(mode Mode, buf *Buffer, op KeyOps) {
 	}
 }
 
-func (r *Render) MoveCursorByMouse(buf *Buffer, p Pos) {
-	r.bufRender.MoveCursorByMouse(buf, p)
+func (r *Render) MoveCursorByMouse(buf *Buffer, p Pos, mode Mode) {
+	r.bufRender.MoveCursorByMouse(buf, p, mode)
 }
 
 func (r *Render) drawHeadline(content RenderContent) {
@@ -264,13 +268,21 @@ func (r *BufRender) moveCursorRight(buf *Buffer) {
  * in between. So we convert back to cursor first.
  *
  */
-func (r *BufRender) MoveCursorByMouse(buf *Buffer, p Pos) {
-	r.syncViewCursorToCursor(buf, p)
+func (r *BufRender) MoveCursorByMouse(buf *Buffer, p Pos, mode Mode) {
+	if p.x < r.viewStartPos.x || p.x >= r.viewEndPos.x {
+		return
+	}
+	offset := BUFFER_CONTENT_START_OFFSET
+	if mode == DirMode {
+		offset += 1
+	}
+	viewCursorPos := Pos{p.x - offset, p.y}
+	r.syncViewCursorToCursor(buf, viewCursorPos)
 }
 
 func (r *BufRender) syncViewCursorToCursor(buf *Buffer, p Pos) {
-	if p.x < r.viewStartPos.x || ((p.x+r.viewAnchor.x) >= len(buf.lines) || p.x >= r.viewEndPos.x-1) {
-		return
+	if (p.x + r.viewAnchor.x) >= len(buf.lines) {
+		p.x = len(buf.lines) - 1
 	}
 	currLine := buf.lines[p.x+r.viewAnchor.x]
 	lineIndex := 0
