@@ -1,12 +1,29 @@
 *Pine Editor Help Doc*
 
-Key mapping
+**UI Overview**
+
+Headline   -> Pine Editor v0.0.0 ---------- 0. Buffer Name
+Buffer     -> Buffer Content
+              ..........
+              ..........
+Statusline -> Line,Col Doc_Position ------- Help Exit
+MiscBuffer -> Message, Open/Save file, Confirmation
+
+**UI Feature**
+
+Left click buffer name to switch buffers forward
+Right click buffer name to close current buffer if no change made
+Hover mouse over buffer name and scroll wheel to switch buffer
+
+**Key Mapping**
 
 Ctrl+X Ctrl+X  Exit or cancel
+Ctrl+X Ctrl+X Ctrl+X Force Exit without Saving Changes
+
 Ctrl-/  Help
 
 Navigation
-Ctrl-/  Next page       Ctrl-B  Next buffer
+Ctrl-V  Next page       Ctrl-B  Next buffer
 Ctrl-Z  Prev page       
 Ctrl-R  Open file       Ctrl-A  Go to beginning of current line
 Ctrl-O  Save file       Ctrl-E  Go to end of current line
@@ -17,4 +34,4 @@ Ctrl-K  Delete current line
 Command Ctrl-X
 Ctrl-X k  Kill current buffer
 
-2020-2023 @ydzhou
+2020-2024 @ydzhou
