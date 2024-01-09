@@ -318,3 +318,12 @@ func (r *BufRender) moveCursorToPrevHalfScreen(buf *Buffer) {
 		buf.cursor.y = len(buf.lines[buf.cursor.x].txt)
 	}
 }
+
+func (r *Render) IsMousePointerOnBufferName(mousePos Pos, filePath string, bufIdx int) bool {
+	bufStartPos, bufEndPos := r.getBufNamePos(filePath, bufIdx)
+	return isOnArea(mousePos, bufStartPos, bufEndPos)
+}
+
+func (r *Render) IsMousePointerOnBuffer(mousePos Pos) bool {
+	return isOnArea(mousePos, *r.bufRender.viewStartPos, *r.bufRender.viewEndPos)
+}

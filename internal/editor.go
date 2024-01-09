@@ -163,6 +163,9 @@ func (e *Editor) processSaveFileMode(filepath string) {
 
 func (e *Editor) processDirMode(event tm.Event) {
 	if event.Type == tm.EventKey {
+		if e.processCommonKey() {
+			return
+		}
 		switch e.key.op {
 		case InsertEnterOp:
 			e.openDir(e.bufIdx)
@@ -171,13 +174,20 @@ func (e *Editor) processDirMode(event tm.Event) {
 		case 'a':
 			e.openDir(-1)
 		}
-		e.processCommonKey()
 		return
 	}
-	e.processCommonMouse(event)
-	switch event.Key {
-	case tm.MouseLeft:
-		e.openDir(e.bufIdx)
+	if e.processCommonMouse(event) {
+		return
+	}
+	if e.render.IsMousePointerOnBuffer(Pos{event.MouseY, event.MouseX}) {
+		switch event.Key {
+		case tm.MouseLeft:
+			e.moveCursorByMouse(Pos{
+				x: event.MouseY,
+				y: event.MouseX,
+			})
+			e.openDir(e.bufIdx)
+		}
 	}
 }
 
@@ -191,7 +201,18 @@ func (e *Editor) processEditMode(event tm.Event) {
 }
 
 func (e *Editor) processEditModeMouse(event tm.Event) {
-	e.processCommonMouse(event)
+	if e.processCommonMouse(event) {
+		return
+	}
+	if e.render.IsMousePointerOnBuffer(Pos{event.MouseY, event.MouseX}) {
+		switch event.Key {
+		case tm.MouseLeft:
+			e.moveCursorByMouse(Pos{
+				x: event.MouseY,
+				y: event.MouseX,
+			})
+		}
+	}
 }
 
 func (e *Editor) processEditModeKey() {
@@ -218,7 +239,7 @@ func (e *Editor) processEditModeKey() {
 	e.processCommonKey()
 }
 
-func (e *Editor) processCommonKey() {
+func (e *Editor) processCommonKey() bool {
 	switch e.key.op {
 	case ExitOp:
 		e.Exit()
@@ -244,32 +265,32 @@ func (e *Editor) processCommonKey() {
 		e.prevBuffer()
 	case CmdOp:
 		e.setMsg("Cmd Mod (^X) Triggered")
-	}
-}
-
-func (e *Editor) processCommonMouse(event tm.Event) {
-	if e.processEditMouseBuffer(event) {
-		return
-	}
-	switch event.Key {
-	case tm.MouseLeft:
-		e.getBuf().lastModifiedCh = "+ML"
-		e.moveCursorByMouse(Pos{
-			x: event.MouseY,
-			y: event.MouseX,
-		})
-	case tm.MouseWheelUp:
-		e.render.MoveCursor(e.mode, e.getBuf(), MoveCursorUpOp)
-	case tm.MouseWheelDown:
-		e.render.MoveCursor(e.mode, e.getBuf(), MoveCursorDownOp)
-	}
-}
-
-func (e *Editor) processEditMouseBuffer(event tm.Event) bool {
-	bufStartPos, bufEndPos := e.render.getBufNamePos(e.getBuf().filePath, e.bufIdx)
-	if !isOnArea(Pos{event.MouseY, event.MouseX}, bufStartPos, bufEndPos) {
+	default:
 		return false
 	}
+	return true
+}
+
+func (e *Editor) processCommonMouse(event tm.Event) bool {
+	mousePos := Pos{event.MouseY, event.MouseX}
+	if e.render.IsMousePointerOnBufferName(mousePos, e.getBuf().filePath, e.bufIdx) {
+		e.processMouseOnBufferName(event)
+		return true
+	} else if e.render.IsMousePointerOnBuffer(mousePos) {
+		switch event.Key {
+		case tm.MouseWheelUp:
+			e.render.MoveCursor(e.mode, e.getBuf(), MoveCursorUpOp)
+		case tm.MouseWheelDown:
+			e.render.MoveCursor(e.mode, e.getBuf(), MoveCursorDownOp)
+		default:
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func (e *Editor) processMouseOnBufferName(event tm.Event) {
 	switch event.Key {
 	case tm.MouseLeft:
 		e.nextBuffer()
@@ -280,7 +301,6 @@ func (e *Editor) processEditMouseBuffer(event tm.Event) bool {
 	case tm.MouseRight:
 		e.Close()
 	}
-	return true
 }
 
 func (e *Editor) moveCursorByMouse(tpos Pos) {
