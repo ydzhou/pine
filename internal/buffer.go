@@ -13,6 +13,8 @@ type Buffer struct {
 	dirty          bool
 	lastModifiedCh string
 	cursor         *Pos
+	hlStartPos     *Pos
+	hlEndPos       *Pos
 	filePath       string
 	isDir          bool
 	readOnly       bool
@@ -33,9 +35,15 @@ func (b *Buffer) New(path string, log *log.Logger) FileOpenState {
 	return Success
 }
 
+func (b *Buffer) ResetHightlight() {
+	b.hlStartPos = &Pos{-1, -1}
+	b.hlEndPos = &Pos{-1, -1}
+}
+
 func (b *Buffer) init(log *log.Logger) {
 	b.log = log
 	b.cursor = &Pos{x: 0, y: 0}
+	b.ResetHightlight()
 	b.lines = []line{}
 	b.lastModifiedCh = "NA"
 	b.dirty = false

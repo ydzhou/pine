@@ -58,6 +58,8 @@ func mapKey(event tm.Event, isCmd bool) KeyOps {
 		return OpenFileOp
 	case tm.KeyCtrlO:
 		return SaveFileOp
+	case tm.KeyCtrlS:
+		return SearchOp
 	case tm.KeyCtrlSlash:
 		return HelpOp
 	case tm.KeyCtrlA:

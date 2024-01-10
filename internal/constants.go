@@ -27,6 +27,7 @@ const (
 	FileOpenMode
 	FileSaveMode
 	DirMode
+	SearchMode
 	ConfirmExitOp
 	ConfirmCloseOp
 )
@@ -79,6 +80,10 @@ const (
 	InsertEnterOp
 	DeleteChOp
 	DeleteLineOp
+	// Search
+	SearchOp
+	SearchNextOp
+	SearchPrevOp
 	// Misc
 	CmdOp
 )
