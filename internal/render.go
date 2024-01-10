@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	FileOpenInfo = "Open file (^X ^X to cancel): "
-	FileSaveInfo = "Save file (^X ^X to cancel): "
+	FileOpenInfo = "Open file (^G to cancel): "
+	FileSaveInfo = "Save file (^G to cancel): "
+	SearchInfo   = "Search (^G to cancel): "
 )
 
 type Render struct {
@@ -37,12 +38,15 @@ type RenderContent struct {
 // ViewStartPos and ViewEndPos are the absolute coordinate of the view on terminal screen
 // ViewCursor is the absolute coordinate of the cusor
 // ViewAnchor is the coordinate of buffer content, used to calculate content outside of the screen
+// HlStartPos and hlEndPos are the view coordinate of the highlight area
 type BufRender struct {
-	viewStartPos *Pos
-	viewEndPos   *Pos
-	viewCursor   *Pos
-	viewAnchor   *Pos
-	log          *log.Logger
+	viewStartPos   *Pos
+	viewEndPos     *Pos
+	viewCursor     *Pos
+	viewAnchor     *Pos
+	hlViewStartPos *Pos
+	hlViewEndPos   *Pos
+	log            *log.Logger
 }
 
 func (r *Render) Init(sett *Setting, logger *log.Logger) {
@@ -71,11 +75,13 @@ func (r *Render) updateViewPos(mode Mode) {
 	}
 	r.bufRender.viewEndPos = &Pos{r.termH + BUFFER_END_OFFSET, r.termW}
 	offset := 0
-	if mode == FileOpenMode {
+	switch mode {
+	case FileOpenMode:
 		offset = len(FileOpenInfo)
-	}
-	if mode == FileSaveMode {
+	case FileSaveMode:
 		offset = len(FileSaveInfo)
+	case SearchMode:
+		offset = len(SearchInfo)
 	}
 	r.miscBufRender.viewStartPos = &Pos{r.termH - 1, offset}
 	r.miscBufRender.viewEndPos = &Pos{r.termH, r.termW}
@@ -93,7 +99,7 @@ func (r *Render) Draw(content RenderContent) {
 
 	r.updateViewPos(content.mode)
 	r.bufRender.SyncCursorToView(content.buf)
-	if content.mode == FileOpenMode || content.mode == FileSaveMode {
+	if content.mode == FileOpenMode || content.mode == FileSaveMode || content.mode == SearchMode {
 		r.miscBufRender.SyncCursorToView(content.miscBuf)
 	}
 
@@ -104,11 +110,11 @@ func (r *Render) Draw(content RenderContent) {
 	}
 
 	miscMode := false
-	if content.mode == FileOpenMode || content.mode == FileSaveMode {
+	if content.mode == FileOpenMode || content.mode == FileSaveMode || content.mode == SearchMode {
 		miscMode = true
 	}
-	r.bufRender.Draw(content.buf, !miscMode)
-	r.miscBufRender.Draw(content.miscBuf, miscMode)
+	r.bufRender.Draw(content.buf, !miscMode, content.mode == SearchMode)
+	r.miscBufRender.Draw(content.miscBuf, miscMode, false)
 	if miscMode {
 		r.drawMiscInfo(content.mode)
 	}
@@ -118,7 +124,7 @@ func (r *Render) Draw(content RenderContent) {
 
 func (r *Render) MoveCursor(mode Mode, buf *Buffer, op KeyOps) {
 	bufRender := r.bufRender
-	if mode == FileOpenMode || mode == FileSaveMode {
+	if mode == FileOpenMode || mode == FileSaveMode || mode == SearchMode {
 		bufRender = r.miscBufRender
 	}
 	if buf.isEmpty() {
@@ -161,18 +167,20 @@ func (r *Render) drawStatusline(content RenderContent) {
 		tm.SetCell(i, x, rune(' '), tm.ColorCyan, tm.ColorCyan)
 	}
 	buf := content.buf
-	tbprint(x, 0, tm.ColorBlack, tm.ColorCyan, fmt.Sprintf("%06d,%06d %4d%%  %x-%s:%x", buf.cursor.x, buf.cursor.y, getLinePer(buf), int(content.mod), string(content.ch), int(content.key)))
+	tbprint(x, 0, tm.ColorBlack, tm.ColorCyan, fmt.Sprintf("%06d,%06d %4d%%  %x-%s:%x %d:%d", buf.cursor.x, buf.cursor.y, getLinePer(buf), int(content.mod), string(content.ch), int(content.key), r.bufRender.hlViewStartPos.x, r.bufRender.hlViewStartPos.y))
 	statusTailMsg := "^/ Help    ^X Exit"
 	tbprint(x, r.termW-len(statusTailMsg), tm.ColorBlack, tm.ColorCyan, statusTailMsg)
 }
 
 func (r *Render) drawMiscInfo(mode Mode) {
 	info := ""
-	if mode == FileOpenMode {
+	switch mode {
+	case FileOpenMode:
 		info = FileOpenInfo
-	}
-	if mode == FileSaveMode {
+	case FileSaveMode:
 		info = FileSaveInfo
+	case SearchMode:
+		info = SearchInfo
 	}
 	tbprint(r.miscBufRender.viewStartPos.x, 0, tm.ColorCyan, tm.ColorDefault, info)
 }
@@ -187,17 +195,32 @@ func (r *Render) getBufNamePos(filePath string, bufIdx int) (Pos, Pos) {
 	return Pos{HEADLINE_OFFSET, r.termW - len(bufName) - len(bufId) - 3}, Pos{HEADLINE_OFFSET + 1, r.termW}
 }
 
+func (r *Render) IsMousePointerOnBufferName(mousePos Pos, filePath string, bufIdx int) bool {
+	bufStartPos, bufEndPos := r.getBufNamePos(filePath, bufIdx)
+	return isOnArea(mousePos, bufStartPos, bufEndPos)
+}
+
+func (r *Render) IsMousePointerOnBuffer(mousePos Pos) bool {
+	return isOnArea(mousePos, *r.bufRender.viewStartPos, *r.bufRender.viewEndPos)
+}
+
 func (r *BufRender) Reset() {
 	r.viewStartPos = &Pos{0, 0}
 	r.viewEndPos = &Pos{0, 0}
 	r.viewCursor = &Pos{0, 0}
 	r.viewAnchor = &Pos{0, 0}
+	r.hlViewStartPos = &Pos{-1, -1}
+	r.hlViewEndPos = &Pos{-1, -1}
 }
 
-func (r *BufRender) Draw(buf *Buffer, hasCursor bool) {
+func (r *BufRender) Draw(buf *Buffer, hasCursor, hasHighlight bool) {
 	drawBuffer(buf, r.viewStartPos, r.viewEndPos, r.viewAnchor, r.viewCursor)
 	if hasCursor {
 		drawCursor(r.viewStartPos, r.viewAnchor, r.viewCursor)
+	}
+	r.updateHighlight(buf)
+	if hasHighlight {
+		drawHighlight(r.hlViewStartPos, r.hlViewEndPos, r.viewAnchor, r.viewStartPos, r.viewEndPos)
 	}
 }
 
@@ -205,17 +228,7 @@ func (r *BufRender) Draw(buf *Buffer, hasCursor bool) {
 // Cursor buffer position is different than terminal view
 // since runes can have multiple width
 func (r *BufRender) SyncCursorToView(buf *Buffer) {
-	r.viewCursor.x = buf.cursor.x
-	r.viewCursor.y = 0
-	if len(buf.lines) > 0 {
-		currLine := &buf.lines[buf.cursor.x]
-		if len(currLine.txt) > 0 {
-			for j := 0; j < buf.cursor.y; j++ {
-				r.viewCursor.y += runeRenderedWidth(r.viewCursor.y, currLine.txt[j])
-			}
-		}
-	}
-	offsetView(r.viewCursor, r.viewAnchor, r.viewStartPos, r.viewEndPos)
+	convertBufPosToViewPos(r.viewCursor, buf.cursor, r.viewAnchor, r.viewStartPos, r.viewEndPos, buf.lines)
 }
 
 /*
@@ -322,11 +335,7 @@ func (r *BufRender) moveCursorToPrevHalfScreen(buf *Buffer) {
 	}
 }
 
-func (r *Render) IsMousePointerOnBufferName(mousePos Pos, filePath string, bufIdx int) bool {
-	bufStartPos, bufEndPos := r.getBufNamePos(filePath, bufIdx)
-	return isOnArea(mousePos, bufStartPos, bufEndPos)
-}
-
-func (r *Render) IsMousePointerOnBuffer(mousePos Pos) bool {
-	return isOnArea(mousePos, *r.bufRender.viewStartPos, *r.bufRender.viewEndPos)
+func (r *BufRender) updateHighlight(buf *Buffer) {
+	convertBufPosToViewPos(r.hlViewStartPos, buf.hlStartPos, r.viewAnchor, r.viewStartPos, r.viewEndPos, buf.lines)
+	convertBufPosToViewPos(r.hlViewEndPos, buf.hlEndPos, r.viewAnchor, r.viewStartPos, r.viewEndPos, buf.lines)
 }

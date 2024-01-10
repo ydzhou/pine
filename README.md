@@ -27,7 +27,7 @@ Ctrl X + Ctrl X to exit the editor
 - [x] Auto indention
 - [ ] Copy and paste within the editor
 - [ ] Undo
-- [ ] Search text
+- [x] Search text
 
 ## Install
 

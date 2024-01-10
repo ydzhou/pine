@@ -40,12 +40,14 @@ func drawBufferLine(
 	renderedData := ""
 	y := 0
 	for _, ch := range line.txt {
+		renderedCh := ""
 		if ch == rune('\t') {
-			renderedData += drawTab(runeRenderedWidth(y, ch))
+			renderedCh = drawTab(runeRenderedWidth(y, ch))
 		} else {
-			renderedData += string(ch)
+			renderedCh = string(ch)
 		}
 		y += runeRenderedWidth(y, ch)
+		renderedData += renderedCh
 	}
 	if y < viewAnchor.y {
 		return
@@ -53,8 +55,8 @@ func drawBufferLine(
 	// TODO: it can print out of the screen. but termbox-go handles
 	// this misbehavior. need to clean up this mess.
 	tbprint(i-viewAnchor.x+viewStartPos.x, viewStartPos.y, tm.ColorDefault, tm.ColorDefault, renderedData[viewAnchor.y:])
-	if len(renderedData[viewAnchor.y:]) >= (viewEndPos.y - viewStartPos.y) {
-		tbprint(i-viewAnchor.x+viewStartPos.x, viewEndPos.y-1, tm.ColorCyan, tm.ColorDefault, ">")
+	if y-viewAnchor.y >= (viewEndPos.y - viewStartPos.y) {
+		tbprint(i-viewAnchor.x+viewStartPos.x, viewEndPos.y-1, tm.ColorDefault, tm.ColorDefault, ">")
 	}
 }
 
@@ -70,20 +72,61 @@ func drawCursor(viewStartPos, viewAnchor, viewCursor *Pos) {
 	tm.SetCursor(viewStartPos.y+viewCursor.y-viewAnchor.y, viewStartPos.x+viewCursor.x-viewAnchor.x)
 }
 
-func offsetView(viewCursor, viewAnchor, viewStartPos, viewEndPos *Pos) {
+func drawHighlight(hlViewStartPos, hlViewEndPos, viewAnchor, viewStartPos, viewEndPos *Pos) {
+	startX := hlViewStartPos.x + viewStartPos.x - viewAnchor.x
+	startY := hlViewStartPos.y + viewStartPos.y - viewAnchor.y
+	endX := hlViewEndPos.x + viewStartPos.x - viewAnchor.x
+	endY := hlViewEndPos.y + viewStartPos.y - viewAnchor.y
+
+	for i := startX; i <= endX; i++ {
+		for j := 0; j < viewEndPos.y-viewStartPos.y; j++ {
+			tm.SetBg(j, i, tm.ColorWhite)
+			tm.SetFg(j, i, tm.ColorBlack)
+		}
+	}
+	for j := 0; j < startY; j++ {
+		tm.SetBg(j, startX, tm.ColorDefault)
+		tm.SetFg(j, startX, tm.ColorDefault)
+	}
+	for j := endY; j < viewEndPos.y-viewStartPos.y; j++ {
+		tm.SetBg(j, endX, tm.ColorDefault)
+		tm.SetFg(j, endX, tm.ColorDefault)
+	}
+}
+
+func convertBufPosToViewPos(
+	viewPos, bufPos, viewAnchor, viewStartPos, viewEndPos *Pos,
+	lines []line,
+) {
+	if len(lines) <= 0 || bufPos.x < 0 || bufPos.x >= len(lines) {
+		return
+	}
+	viewPos.x = bufPos.x
+	viewPos.y = 0
+	currLine := &lines[bufPos.x]
+	if len(currLine.txt) > 0 {
+		for j := 0; j < bufPos.y; j++ {
+			viewPos.y += runeRenderedWidth(viewPos.y, currLine.txt[j])
+		}
+	}
+
+	offsetView(viewPos, viewAnchor, viewStartPos, viewEndPos)
+}
+
+func offsetView(viewPos, viewAnchor, viewStartPos, viewEndPos *Pos) {
 	h := viewEndPos.x - viewStartPos.x
 	w := viewEndPos.y - viewStartPos.y
-	if viewAnchor.x > 0 && viewCursor.x < viewAnchor.x {
-		viewAnchor.x = viewCursor.x
+	if viewAnchor.x > 0 && viewPos.x < viewAnchor.x {
+		viewAnchor.x = viewPos.x
 	}
-	if viewCursor.x > viewAnchor.x+h-1 {
-		viewAnchor.x = viewCursor.x - h + 1
+	if viewPos.x > viewAnchor.x+h-1 {
+		viewAnchor.x = viewPos.x - h + 1
 	}
-	if viewAnchor.y > 0 && viewCursor.y < viewAnchor.y {
-		viewAnchor.y = viewCursor.y
+	if viewAnchor.y > 0 && viewPos.y < viewAnchor.y {
+		viewAnchor.y = viewPos.y
 	}
-	if viewCursor.y > viewAnchor.y+w-1 {
-		viewAnchor.y = viewCursor.y - w + 1
+	if viewPos.y > viewAnchor.y+w-1 {
+		viewAnchor.y = viewPos.y - w + 1
 	}
 }
 

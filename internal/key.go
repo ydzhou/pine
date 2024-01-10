@@ -36,6 +36,8 @@ func mapKey(event tm.Event, isCmd bool) KeyOps {
 		switch event.Key {
 		case tm.KeyCtrlX:
 			return ExitOp
+		case tm.KeyCtrlG:
+			return CancelOp
 		}
 		switch event.Ch {
 		case rune('k'):
@@ -54,10 +56,14 @@ func mapKey(event tm.Event, isCmd bool) KeyOps {
 	switch event.Key {
 	case tm.KeyCtrlX:
 		return CmdOp
+	case tm.KeyCtrlG:
+		return CancelOp
 	case tm.KeyCtrlR:
 		return OpenFileOp
 	case tm.KeyCtrlO:
 		return SaveFileOp
+	case tm.KeyCtrlS:
+		return SearchOp
 	case tm.KeyCtrlSlash:
 		return HelpOp
 	case tm.KeyCtrlA:
@@ -70,9 +76,9 @@ func mapKey(event tm.Event, isCmd bool) KeyOps {
 		return PrevHalfPageOp
 	case tm.KeyCtrlK:
 		return DeleteLineOp
-	case tm.KeyArrowUp:
+	case tm.KeyArrowUp, tm.KeyCtrlP:
 		return MoveCursorUpOp
-	case tm.KeyArrowDown:
+	case tm.KeyArrowDown, tm.KeyCtrlN:
 		return MoveCursorDownOp
 	case tm.KeyArrowLeft:
 		return MoveCursorLeftOp

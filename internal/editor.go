@@ -14,6 +14,7 @@ type Editor struct {
 	bufs    []*Buffer
 	miscBuf *Buffer
 	render  Render
+	search  Search
 	mode    Mode
 	sett    *Setting
 	log     *log.Logger
@@ -31,6 +32,7 @@ func (e *Editor) Init(sett *Setting) {
 	e.isExit = false
 	e.miscBuf = &Buffer{}
 	e.render.Init(sett, e.log)
+	e.search = Search{log: e.log}
 	e.key = &KeyMapper{}
 	e.bufIdx = DEFAULT_CURR_BUF_INDEX
 	e.bufs = []*Buffer{}
@@ -106,6 +108,8 @@ func (e *Editor) process() {
 			e.processSaveFileMode(e.getBuf().filePath)
 		case DirMode:
 			e.processDirMode(event)
+		case SearchMode:
+			e.processSearchMode()
 		default:
 			e.log.Fatal("unsupported edit mode")
 		}
@@ -132,6 +136,8 @@ func (e *Editor) identifyFileMode() {
 func (e *Editor) processOpenFileMode() {
 	switch e.key.op {
 	case ExitOp:
+		e.Exit()
+	case CancelOp:
 		e.mode = EditMode
 		e.setMsg("Open file cancelled")
 	case DeleteChOp:
@@ -148,6 +154,8 @@ func (e *Editor) processOpenFileMode() {
 func (e *Editor) processSaveFileMode(filepath string) {
 	switch e.key.op {
 	case ExitOp:
+		e.Exit()
+	case CancelOp:
 		e.mode = EditMode
 		e.setMsg("Save file cancelled")
 	case DeleteChOp:
@@ -156,6 +164,50 @@ func (e *Editor) processSaveFileMode(filepath string) {
 		if len(e.miscBuf.lines) > 0 && len(e.miscBuf.lines[0].txt) > 0 {
 			e.Save(string(e.miscBuf.lines[0].txt))
 		}
+	case InsertChOp:
+		e.miscBuf.Insert(e.key.ch)
+	}
+}
+
+func (e *Editor) processSearchMode() {
+	target := ""
+	if !e.miscBuf.isEmpty() {
+		target = string(e.miscBuf.lines[0].txt)
+	}
+	switch e.key.op {
+	case ExitOp:
+		e.Exit()
+	case CancelOp:
+		e.getBuf().ResetHightlight()
+		e.mode = EditMode
+	case DeleteChOp:
+		e.miscBuf.Delete()
+	case InsertEnterOp:
+		e.search.Search(string(e.miscBuf.lines[0].txt), e.getBuf())
+		if len(e.search.matchedStartPos) > 0 {
+			e.search.currCandidateIdx = 0
+			e.search.SetBufferHightlight(e.getBuf(), target)
+		}
+	case MoveCursorDownOp, MoveCursorRightOp:
+		if len(e.search.matchedStartPos) <= 0 {
+			return
+		}
+		if e.search.currCandidateIdx < len(e.search.matchedStartPos)-1 {
+			e.search.currCandidateIdx++
+		} else {
+			e.search.currCandidateIdx = 0
+		}
+		e.search.SetBufferHightlight(e.getBuf(), target)
+	case MoveCursorUpOp, MoveCursorLeftOp:
+		if len(e.search.matchedStartPos) <= 0 {
+			return
+		}
+		if e.search.currCandidateIdx > 0 {
+			e.search.currCandidateIdx--
+		} else {
+			e.search.currCandidateIdx = len(e.search.matchedStartPos) - 1
+		}
+		e.search.SetBufferHightlight(e.getBuf(), target)
 	case InsertChOp:
 		e.miscBuf.Insert(e.key.ch)
 	}
@@ -263,6 +315,8 @@ func (e *Editor) processCommonKey() bool {
 		e.nextBuffer()
 	case PrevBufferOp:
 		e.prevBuffer()
+	case SearchOp:
+		e.toSearchMode()
 	case CmdOp:
 		e.setMsg("Cmd Mod (^X) Triggered")
 	default:
@@ -407,6 +461,12 @@ func (e *Editor) toSaveFileMode() {
 	e.miscBuf.InsertString(e.getBuf().filePath)
 	e.render.miscBufRender.Reset()
 	e.mode = FileSaveMode
+}
+
+func (e *Editor) toSearchMode() {
+	e.miscBuf.New("", e.log)
+	e.render.miscBufRender.Reset()
+	e.mode = SearchMode
 }
 
 func (e *Editor) toHelpPage() {
