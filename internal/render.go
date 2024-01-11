@@ -281,6 +281,9 @@ func (r *BufRender) MoveCursorByMouse(buf *Buffer, p Pos, mode Mode) {
 }
 
 func (r *BufRender) syncViewCursorToCursor(buf *Buffer, p Pos) {
+	if len(buf.lines) <= 0 {
+		return
+	}
 	if (p.x + r.viewAnchor.x) >= len(buf.lines) {
 		p.x = len(buf.lines) - 1
 	}
