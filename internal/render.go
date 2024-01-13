@@ -237,24 +237,21 @@ func (r *BufRender) SyncCursorToView(buf *Buffer) {
  * Update cursor position and view based on cursor movement
  * Cursor x,y are determined by view x,y
  */
+
 func (r *BufRender) moveCursorUp(buf *Buffer) {
 	if buf.cursor.x == 0 {
 		return
 	}
-	buf.cursor.x--
-	if buf.cursor.y > len(buf.lines[buf.cursor.x].txt) {
-		buf.cursor.y = len(buf.lines[buf.cursor.x].txt)
-	}
+	r.viewCursor.x -= 1
+	r.syncViewPosToCursor(buf, Pos{r.viewCursor.x - r.viewAnchor.x, r.viewCursor.y - r.viewAnchor.y})
 }
 
 func (r *BufRender) moveCursorDown(buf *Buffer) {
 	if buf.cursor.x == len(buf.lines)-1 {
 		return
 	}
-	buf.cursor.x++
-	if buf.cursor.y > len(buf.lines[buf.cursor.x].txt) {
-		buf.cursor.y = len(buf.lines[buf.cursor.x].txt)
-	}
+	r.viewCursor.x += 1
+	r.syncViewPosToCursor(buf, Pos{r.viewCursor.x - r.viewAnchor.x, r.viewCursor.y - r.viewAnchor.y})
 }
 
 func (r *BufRender) moveCursorLeft(buf *Buffer) {
@@ -290,24 +287,26 @@ func (r *BufRender) MoveCursorByMouse(buf *Buffer, p Pos, mode Mode) {
 		offset += 1
 	}
 	viewCursorPos := Pos{p.x - offset, p.y}
-	r.syncViewCursorToCursor(buf, viewCursorPos)
+	r.syncViewPosToCursor(buf, viewCursorPos)
 }
 
-func (r *BufRender) syncViewCursorToCursor(buf *Buffer, p Pos) {
+// Sync view position to cursor
+// View position is the absolute coordinate of terminal
+func (r *BufRender) syncViewPosToCursor(buf *Buffer, viewPos Pos) {
 	if len(buf.lines) <= 0 {
 		return
 	}
-	if (p.x + r.viewAnchor.x) >= len(buf.lines) {
-		p.x = len(buf.lines) - 1
+	if (viewPos.x + r.viewAnchor.x) >= len(buf.lines) {
+		viewPos.x = len(buf.lines) - 1
 	}
-	currLine := buf.lines[p.x+r.viewAnchor.x]
+	currLine := buf.lines[viewPos.x+r.viewAnchor.x]
 	lineIndex := 0
 	viewLineIndex := 0
-	for viewLineIndex < p.y+r.viewAnchor.y && lineIndex < len(currLine.txt) {
+	for viewLineIndex < viewPos.y+r.viewAnchor.y && lineIndex < len(currLine.txt) {
 		viewLineIndex += runeRenderedWidth(viewLineIndex, currLine.txt[lineIndex])
 		lineIndex++
 	}
-	buf.cursor.x = p.x + r.viewAnchor.x
+	buf.cursor.x = viewPos.x + r.viewAnchor.x
 	buf.cursor.y = lineIndex
 }
 
@@ -318,9 +317,7 @@ func (r *BufRender) moveCursorToNextHalfScreen(buf *Buffer) {
 	} else {
 		buf.cursor.x += h / 2
 	}
-	if buf.cursor.y > len(buf.lines[buf.cursor.x].txt) {
-		buf.cursor.y = len(buf.lines[buf.cursor.x].txt)
-	}
+	r.syncViewPosToCursor(buf, Pos{buf.cursor.x - r.viewAnchor.x, buf.cursor.y - r.viewAnchor.y})
 }
 
 func (r *BufRender) moveCursorToPrevHalfScreen(buf *Buffer) {
@@ -333,6 +330,7 @@ func (r *BufRender) moveCursorToPrevHalfScreen(buf *Buffer) {
 	if buf.cursor.y > len(buf.lines[buf.cursor.x].txt) {
 		buf.cursor.y = len(buf.lines[buf.cursor.x].txt)
 	}
+	r.syncViewPosToCursor(buf, Pos{buf.cursor.x - r.viewAnchor.x, buf.cursor.y - r.viewAnchor.y})
 }
 
 func (r *BufRender) updateHighlight(buf *Buffer) {
