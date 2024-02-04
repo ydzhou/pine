@@ -249,7 +249,7 @@ func (b *Buffer) removeRune() {
 }
 
 func (b *Buffer) Save(path string) (int, error) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return 0, err
 	}
